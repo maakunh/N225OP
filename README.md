@@ -34,7 +34,7 @@ N225OP/
 │   └── heatmap_dashboard.html    IVヒートマップ
 └── docs/       ドキュメント
     ├── implementation_guide.md   実装手順書（ゼロから構築する詳細版）
-    └── guide.html                使い方ガイド（初心者向け）
+    └── guide.md                  使い方ガイド（初心者向け）
 ```
 
 ---
@@ -77,9 +77,9 @@ data.js（ブラウザが読めるJavaScript形式）
    - **Log**：時系列蓄積用（1行目ヘッダー：時刻／権利行使価格／C現在値／C_IV／P現在値／P_IV）
 4. `excel/OptionLogger.bas` を VBエディタ（`Alt + F11`）の「ファイル」→「ファイルのインポート」で取り込む
 5. `OptionLogger.bas` の定数 `DASH_FOLDER`（既定 `C:\OptionDash`）を出力先に設定
-6. `web/` の3つのHTML（と必要に応じて `docs/guide.html`）を `DASH_FOLDER` に配置（`data.js` は自動生成される）
+6. `web/` の3つのHTMLを `DASH_FOLDER` に配置（`data.js` は自動生成される）
 
-> ダッシュボードは `data.js` と同じフォルダに置かれている必要があります。リポジトリはソース管理用にフォルダ分けしていますが、実際の運用では3つのHTMLを `DASH_FOLDER`（既定 `C:\OptionDash`）に集め、そこに VBA が `data.js` を書き出します。ナビから使い方ガイドも開けるようにするには `guide.html` も同じフォルダに置きます。
+> ダッシュボードは `data.js` と同じフォルダに置かれている必要があります。リポジトリはソース管理用にフォルダ分けしていますが、実際の運用では3つのHTMLを `DASH_FOLDER`（既定 `C:\OptionDash`）に集め、そこに VBA が `data.js` を書き出します。
 
 詳細は [`docs/implementation_guide.md`](docs/implementation_guide.md) を参照してください。
 
@@ -126,7 +126,7 @@ data.js（ブラウザが読めるJavaScript形式）
 
 ## ダッシュボードの見方
 
-オプション初心者向けの使い方ガイドを同梱しています（[`docs/guide.html`](docs/guide.html)）。IVとは何か、スキューの読み方、3画面の組み合わせ方、シグナルの売買への結びつけ方までを解説しています。要点は次のとおりです。
+オプション初心者向けの使い方ガイドを同梱しています（[`docs/guide.md`](docs/guide.md)）。IVとは何か、スキューの読み方、3画面の組み合わせ方、シグナルの売買への結びつけ方までを解説しています。要点は次のとおりです。
 
 - **IVスマイル**：曲線全体が上がればIV上昇（割高方向）、下方ほどIVが高い右肩下がりは下落ヘッジ需要の表れ（スキュー）
 - **価格マルチ**：青（コール）が一斉上昇＝上昇局面、桃（プット）が一斉上昇＝下落局面。線の途切れは流動性が低い行使価格
