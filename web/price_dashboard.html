@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日経225ミニOP 価格マルチチャート</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="data.js"></script>
+<style>
+  body{font-family:"Segoe UI","Hiragino Kaku Gothic ProN",sans-serif;margin:0;padding:16px;background:#0f1115;color:#e6e6e6;}
+  h1{font-size:16px;font-weight:600;margin:0 0 4px;}
+  nav{display:flex;gap:10px;margin-bottom:12px;font-size:13px;}
+  nav a{color:#5aa0e6;text-decoration:none;padding:3px 8px;border:1px solid #2a2e38;border-radius:6px;}
+  nav a.active{background:#1a2330;border-color:#3a82d6;}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+  label{font-size:13px;color:#aab;}
+  input[type=range]{width:220px;}
+  .legend{display:flex;gap:16px;font-size:13px;}
+  .c-call{color:#5aa0e6;} .c-put{color:#e68bb0;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+  .cell{background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;padding:6px 8px;}
+  .cell.atm{border-color:#3a82d6;}
+  .cell h4{margin:0 0 2px;font-size:12px;font-weight:600;display:flex;justify-content:space-between;align-items:baseline;}
+  .cell h4 .px{font-size:11px;color:#8a8f99;font-weight:400;}
+  .cw{position:relative;height:96px;}
+  #status{font-size:12px;color:#8a8f99;}
+  .reloadbox{font-size:12px;color:#8a8f99;margin-left:auto;}
+  button{padding:4px 12px;background:#1a1d24;color:#e6e6e6;border:1px solid #2a2e38;border-radius:6px;cursor:pointer;}
+</style>
+</head>
+<body>
+<h1>日経225ミニオプション 価格時系列マルチチャート</h1>
+<nav>
+  <a href="guide.html">使い方ガイド</a>
+  <a href="dashboard.html">IVスマイル</a>
+  <a href="price_dashboard.html" class="active">価格マルチ</a>
+  <a href="heatmap_dashboard.html">IVヒートマップ</a>
+</nav>
+
+<div class="row">
+  <label>表示本数（ATM中心）</label>
+  <input type="range" id="rangeSlider" min="5" max="60" value="21" step="2">
+  <span id="rangeLabel" style="font-size:14px;font-weight:600;">21</span>
+  <div class="legend"><span class="c-call">■ コール価格</span><span class="c-put">■ プット価格</span></div>
+  <span id="status"></span>
+  <span class="reloadbox"><label><input type="checkbox" id="autoReload"> 自動更新</label></span>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const ATM=70000;let byStrike={},times=[],charts=[];
+function prep(){byStrike={};const seenT={};
+  (window.OPTION_DATA||[]).forEach(r=>{const t=r[0],k=+r[1];
+    if(!byStrike[k])byStrike[k]=[];byStrike[k].push({t:t,cP:+r[2],pP:+r[4]});seenT[t]=1;});
+  times=Object.keys(seenT);}
+function pickStrikes(n){const all=Object.keys(byStrike).map(Number).sort((a,b)=>a-b);
+  let ci=0,best=1e9;all.forEach((k,i)=>{const d=Math.abs(k-ATM);if(d<best){best=d;ci=i;}});
+  const half=Math.floor(n/2);const start=Math.max(0,ci-half);
+  const end=Math.min(all.length,start+n);return all.slice(start,end).reverse();}
+function render(){const n=+document.getElementById('rangeSlider').value;
+  document.getElementById('rangeLabel').textContent=n;
+  const strikes=pickStrikes(n);charts.forEach(c=>c.destroy());charts=[];
+  const grid=document.getElementById('grid');grid.innerHTML='';
+  strikes.forEach(k=>{const series=byStrike[k];
+    const cell=document.createElement('div');cell.className='cell'+(k===ATM?' atm':'');
+    const h=document.createElement('h4');
+    const lastC=[...series].reverse().find(s=>s.cP>0);
+    const lastP=[...series].reverse().find(s=>s.pP>0);
+    h.innerHTML='<span>'+k.toLocaleString()+'</span><span class="px">C '+
+      (lastC?lastC.cP:'—')+' / P '+(lastP?lastP.pP:'—')+'</span>';
+    cell.appendChild(h);
+    const wrap=document.createElement('div');wrap.className='cw';
+    const cv=document.createElement('canvas');wrap.appendChild(cv);
+    cell.appendChild(wrap);grid.appendChild(cell);
+    const ch=new Chart(cv,{type:'line',
+      data:{labels:series.map(s=>s.t),datasets:[
+        {data:series.map(s=>s.cP>0?s.cP:null),borderColor:'#3a82d6',borderWidth:1.3,pointRadius:0,tension:0.2,spanGaps:true},
+        {data:series.map(s=>s.pP>0?s.pP:null),borderColor:'#d4537e',borderWidth:1.3,pointRadius:0,tension:0.2,spanGaps:true,borderDash:[4,2]}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:false},
+          tooltip:{callbacks:{title:it=>it[0].label,
+            label:c=>(c.datasetIndex===0?'C':'P')+': '+(c.parsed.y!=null?c.parsed.y:'—')}}},
+        scales:{x:{display:false},
+          y:{ticks:{color:'#8a8f99',font:{size:9},maxTicksLimit:4},grid:{color:'rgba(128,128,128,0.1)'}}}}});
+    charts.push(ch);});
+  document.getElementById('status').textContent=strikes.length+'銘柄 / '+times.length+'時点';}
+function init(){if(!window.OPTION_DATA){
+    document.getElementById('status').textContent='data.js が読み込めません';return;}
+  prep();document.getElementById('rangeSlider').addEventListener('input',render);
+  setupAutoReload();render();}
+function setupAutoReload(){const cb=document.getElementById('autoReload');
+  if(localStorage.getItem('autoReload')==='1'){cb.checked=true;
+    setTimeout(()=>location.reload(),300000);}
+  cb.addEventListener('change',()=>localStorage.setItem('autoReload',cb.checked?'1':'0'));}
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日経225ミニOP IVスマイル</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="data.js"></script>
+<style>
+  body{font-family:"Segoe UI","Hiragino Kaku Gothic ProN",sans-serif;margin:0;padding:16px;background:#0f1115;color:#e6e6e6;}
+  h1{font-size:16px;font-weight:600;margin:0 0 4px;}
+  nav{display:flex;gap:10px;margin-bottom:12px;font-size:13px;}
+  nav a{color:#5aa0e6;text-decoration:none;padding:3px 8px;border:1px solid #2a2e38;border-radius:6px;}
+  nav a.active{background:#1a2330;border-color:#3a82d6;}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+  label{font-size:13px;color:#aab;}
+  input[type=range]{flex:1;min-width:200px;}
+  .tlabel{font-size:15px;font-weight:600;min-width:150px;}
+  button{padding:4px 12px;background:#1a1d24;color:#e6e6e6;border:1px solid #2a2e38;border-radius:6px;cursor:pointer;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;}
+  .card{background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;padding:10px 12px;}
+  .card .k{font-size:12px;color:#8a8f99;} .card .v{font-size:22px;font-weight:600;margin-top:2px;}
+  .chartwrap{position:relative;width:100%;height:360px;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;padding:8px;}
+  .checks{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:13px;}
+  .checks label{cursor:pointer;}
+  .c-call{color:#5aa0e6;} .c-put{color:#e68bb0;} .c-otm{color:#7bd49a;}
+  .reloadbox{font-size:12px;color:#8a8f99;margin-left:auto;}
+</style>
+</head>
+<body>
+<h1>日経225ミニオプション IVスマイル時系列</h1>
+<nav>
+  <a href="guide.html">使い方ガイド</a>
+  <a href="dashboard.html" class="active">IVスマイル</a>
+  <a href="price_dashboard.html">価格マルチ</a>
+  <a href="heatmap_dashboard.html">IVヒートマップ</a>
+</nav>
+
+<div class="row">
+  <label>時刻</label>
+  <input type="range" id="tslider" min="0" max="0" value="0" step="1">
+  <span class="tlabel" id="tlabel">—</span>
+  <button id="playBtn">▶ 再生</button>
+  <span class="reloadbox"><label><input type="checkbox" id="autoReload"> 自動更新</label></span>
+</div>
+
+<div class="checks">
+  <label><input type="checkbox" id="showCall" checked> <span class="c-call">コールIV</span></label>
+  <label><input type="checkbox" id="showPut" checked> <span class="c-put">プットIV</span></label>
+  <label><input type="checkbox" id="showOTM"> <span class="c-otm">OTM側IV（推奨）</span></label>
+  <label><input type="checkbox" id="showPrev"> <span style="color:#888;">始点と比較</span></label>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="k">ATM IV (70000)</div><div class="v" id="atmiv">—</div></div>
+  <div class="card"><div class="k">最小IV</div><div class="v" id="miniv">—</div></div>
+  <div class="card"><div class="k">最大IV</div><div class="v" id="maxiv">—</div></div>
+  <div class="card"><div class="k">下方スキュー</div><div class="v" id="skew">—</div></div>
+</div>
+
+<div class="chartwrap"><canvas id="smile"></canvas></div>
+
+<script>
+const ATM=70000;
+let chart,byTime={},times=[],playTimer=null;
+function groupData(){byTime={};if(!window.OPTION_DATA)return;
+  window.OPTION_DATA.forEach(r=>{const t=r[0];if(!byTime[t])byTime[t]=[];
+    byTime[t].push({k:+r[1],cP:+r[2],cIV:+r[3],pP:+r[4],pIV:+r[5]});});
+  times=Object.keys(byTime);
+  times.forEach(t=>byTime[t].sort((a,b)=>b.k-a.k));}
+function snapAsc(t){return byTime[t].slice().sort((a,b)=>a.k-b.k);}
+function chk(id){return document.getElementById(id).checked;}
+function buildCfg(idx){
+  const snap=snapAsc(times[idx]);const labels=snap.map(r=>r.k);const ds=[];
+  if(chk('showOTM')){const otm=snap.map(r=>r.k<ATM?r.cIV:r.pIV);
+    ds.push({label:'OTM-IV',data:otm,borderColor:'#3bbf6f',borderWidth:1.8,pointRadius:0,tension:0.25});}
+  if(chk('showCall'))ds.push({label:'コールIV',data:snap.map(r=>r.cIV>0?r.cIV:null),
+    borderColor:'#3a82d6',borderWidth:1.5,pointRadius:0,tension:0.25,spanGaps:true});
+  if(chk('showPut'))ds.push({label:'プットIV',data:snap.map(r=>r.pIV>0?r.pIV:null),
+    borderColor:'#d4537e',borderWidth:1.5,pointRadius:0,tension:0.25,borderDash:[6,3],spanGaps:true});
+  if(chk('showPrev')){const p=snapAsc(times[0]);
+    ds.push({label:'始点コールIV',data:p.map(r=>r.cIV>0?r.cIV:null),
+      borderColor:'rgba(150,150,150,0.5)',borderWidth:1,pointRadius:0,tension:0.25,borderDash:[2,2],spanGaps:true});}
+  return{labels,datasets:ds};}
+function updateStats(idx){const snap=byTime[times[idx]];
+  const atm=snap.find(r=>r.k===ATM);const cIVs=snap.map(r=>r.cIV).filter(v=>v>0);
+  const lo=snap.find(r=>r.k===62000)||snap[snap.length-1];
+  document.getElementById('atmiv').textContent=atm?atm.cIV.toFixed(2):'—';
+  document.getElementById('miniv').textContent=Math.min(...cIVs).toFixed(2);
+  document.getElementById('maxiv').textContent=Math.max(...cIVs).toFixed(2);
+  const sk=atm?(lo.pIV-atm.pIV):0;
+  document.getElementById('skew').textContent=(sk>=0?'+':'')+sk.toFixed(2);}
+function render(){const idx=+document.getElementById('tslider').value;
+  document.getElementById('tlabel').textContent=times[idx]||'—';if(!times.length)return;
+  updateStats(idx);const cfg=buildCfg(idx);
+  if(chart){chart.data=cfg;chart.update('none');return;}
+  chart=new Chart(document.getElementById('smile'),{type:'line',data:cfg,
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{title:it=>'行使価格 '+it[0].label,
+          label:c=>c.dataset.label+': '+(c.parsed.y!=null?c.parsed.y.toFixed(2)+'%':'—')}}},
+      scales:{x:{title:{display:true,text:'権利行使価格',color:'#888'},
+          ticks:{color:'#888',maxTicksLimit:12,font:{size:10}},grid:{color:'rgba(128,128,128,0.12)'}},
+        y:{title:{display:true,text:'IV (%)',color:'#888'},
+          ticks:{color:'#888',font:{size:10}},grid:{color:'rgba(128,128,128,0.12)'}}}}});}
+function init(){groupData();const sl=document.getElementById('tslider');
+  if(!times.length){document.getElementById('tlabel').textContent='data.js が読み込めません';return;}
+  sl.max=times.length-1;sl.value=times.length-1;
+  ['tslider','showCall','showPut','showOTM','showPrev'].forEach(id=>{
+    document.getElementById(id).addEventListener('input',render);
+    document.getElementById(id).addEventListener('change',render);});
+  document.getElementById('playBtn').addEventListener('click',function(){
+    if(playTimer){clearInterval(playTimer);playTimer=null;this.textContent='▶ 再生';return;}
+    this.textContent='■ 停止';
+    playTimer=setInterval(()=>{let v=(+sl.value)+1;if(v>+sl.max)v=0;sl.value=v;render();},800);});
+  setupAutoReload();render();}
+function setupAutoReload(){
+  const cb=document.getElementById('autoReload');
+  if(localStorage.getItem('autoReload')==='1'){cb.checked=true;
+    setTimeout(()=>location.reload(),300000);}
+  cb.addEventListener('change',()=>localStorage.setItem('autoReload',cb.checked?'1':'0'));}
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>

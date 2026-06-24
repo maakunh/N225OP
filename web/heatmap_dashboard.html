@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日経225ミニOP IVヒートマップ</title>
+<script src="data.js"></script>
+<style>
+  body{font-family:"Segoe UI","Hiragino Kaku Gothic ProN",sans-serif;margin:0;padding:16px;background:#0f1115;color:#e6e6e6;}
+  h1{font-size:16px;font-weight:600;margin:0 0 4px;}
+  nav{display:flex;gap:10px;margin-bottom:12px;font-size:13px;}
+  nav a{color:#5aa0e6;text-decoration:none;padding:3px 8px;border:1px solid #2a2e38;border-radius:6px;}
+  nav a.active{background:#1a2330;border-color:#3a82d6;}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+  label{font-size:13px;color:#aab;}
+  input[type=range]{width:200px;}
+  select{background:#1a1d24;color:#e6e6e6;border:1px solid #2a2e38;border-radius:6px;padding:3px 6px;}
+  .reloadbox{font-size:12px;color:#8a8f99;margin-left:auto;}
+  .hmwrap{overflow:auto;background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;padding:8px;}
+  table{border-collapse:collapse;font-size:10px;}
+  th{position:sticky;color:#8a8f99;font-weight:400;padding:2px 4px;background:#1a1d24;}
+  th.strike{position:sticky;left:0;text-align:right;z-index:2;}
+  td{width:20px;height:16px;text-align:center;color:#0a0a0a;font-size:9px;}
+  td.atm{outline:2px solid #5aa0e6;outline-offset:-2px;}
+  .legend{display:flex;align-items:center;gap:6px;font-size:11px;color:#8a8f99;}
+  .legbar{width:120px;height:12px;border-radius:3px;
+    background:linear-gradient(90deg,#2c7bb6,#abd9e9,#ffffbf,#fdae61,#d7191c);}
+  #status{font-size:12px;color:#8a8f99;}
+</style>
+</head>
+<body>
+<h1>日経225ミニオプション IVヒートマップ（行使価格 × 時刻）</h1>
+<nav>
+  <a href="guide.html">使い方ガイド</a>
+  <a href="dashboard.html">IVスマイル</a>
+  <a href="price_dashboard.html">価格マルチ</a>
+  <a href="heatmap_dashboard.html" class="active">IVヒートマップ</a>
+</nav>
+
+<div class="row">
+  <label>種別</label>
+  <select id="kind">
+    <option value="otm">OTM側IV（推奨）</option>
+    <option value="call">コールIV</option>
+    <option value="put">プットIV</option>
+  </select>
+  <label>表示本数（ATM中心）</label>
+  <input type="range" id="rangeSlider" min="9" max="80" value="31" step="2">
+  <span id="rangeLabel" style="font-size:14px;font-weight:600;">31</span>
+  <div class="legend">低 <span class="legbar"></span> 高</div>
+  <span id="status"></span>
+  <span class="reloadbox"><label><input type="checkbox" id="autoReload"> 自動更新</label></span>
+</div>
+
+<div class="hmwrap"><div id="hm"></div></div>
+
+<script>
+const ATM=70000;let byStrike={},times=[];
+function prep(){byStrike={};const seenT={};
+  (window.OPTION_DATA||[]).forEach(r=>{const t=r[0],k=+r[1];
+    if(!byStrike[k])byStrike[k]={};byStrike[k][t]={cIV:+r[3],pIV:+r[5]};seenT[t]=1;});
+  times=Object.keys(seenT);}
+function pickStrikes(n){const all=Object.keys(byStrike).map(Number).sort((a,b)=>b-a);
+  let ci=0,best=1e9;all.forEach((k,i)=>{const d=Math.abs(k-ATM);if(d<best){best=d;ci=i;}});
+  const half=Math.floor(n/2);const start=Math.max(0,ci-half);
+  const end=Math.min(all.length,start+n);return all.slice(start,end);}
+function ivOf(k,t,kind){const c=byStrike[k][t];if(!c)return null;
+  if(kind==='call')return c.cIV>0?c.cIV:null;
+  if(kind==='put')return c.pIV>0?c.pIV:null;
+  return k<ATM?(c.cIV>0?c.cIV:null):(c.pIV>0?c.pIV:null);}
+function color(v,min,max){if(v==null)return '#15171d';
+  const r=(v-min)/(max-min||1);
+  const stops=[[44,123,182],[171,217,233],[255,255,191],[253,174,97],[215,25,28]];
+  const x=Math.max(0,Math.min(1,r))*(stops.length-1);
+  const i=Math.floor(x),f=x-i;const a=stops[i],b=stops[Math.min(i+1,stops.length-1)];
+  const ch=a.map((s,j)=>Math.round(s+(b[j]-s)*f));
+  return 'rgb('+ch[0]+','+ch[1]+','+ch[2]+')';}
+function render(){const n=+document.getElementById('rangeSlider').value;
+  document.getElementById('rangeLabel').textContent=n;
+  const kind=document.getElementById('kind').value;
+  const strikes=pickStrikes(n);
+  let vals=[];strikes.forEach(k=>times.forEach(t=>{const v=ivOf(k,t,kind);if(v!=null)vals.push(v);}));
+  const min=Math.min(...vals),max=Math.max(...vals);
+  let html='<table><tr><th class="strike">行使\\時刻</th>';
+  times.forEach(t=>{html+='<th>'+t.split(' ').pop()+'</th>';});
+  html+='</tr>';
+  strikes.forEach(k=>{html+='<tr><th class="strike">'+k.toLocaleString()+'</th>';
+    times.forEach(t=>{const v=ivOf(k,t,kind);
+      html+='<td class="'+(k===ATM?'atm':'')+'" style="background:'+color(v,min,max)+'" title="'+
+        k+' '+t+' : '+(v!=null?v.toFixed(2)+'%':'—')+'">'+(v!=null?v.toFixed(0):'')+'</td>';});
+    html+='</tr>';});
+  html+='</table>';
+  document.getElementById('hm').innerHTML=html;
+  document.getElementById('status').textContent=
+    strikes.length+'銘柄 / '+times.length+'時点 / IV '+(isFinite(min)?min.toFixed(1):'—')+'〜'+(isFinite(max)?max.toFixed(1):'—');}
+function init(){if(!window.OPTION_DATA){
+    document.getElementById('status').textContent='data.js が読み込めません';return;}
+  prep();
+  document.getElementById('rangeSlider').addEventListener('input',render);
+  document.getElementById('kind').addEventListener('change',render);
+  setupAutoReload();render();}
+function setupAutoReload(){const cb=document.getElementById('autoReload');
+  if(localStorage.getItem('autoReload')==='1'){cb.checked=true;
+    setTimeout(()=>location.reload(),300000);}
+  cb.addEventListener('change',()=>localStorage.setItem('autoReload',cb.checked?'1':'0'));}
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>

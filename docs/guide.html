@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日経225ミニOP ダッシュボード活用ガイド</title>
+<style>
+  :root{
+    --ink:#1a2230;        /* 本文の濃紺 */
+    --ink-soft:#4a5568;   /* 補助テキスト */
+    --paper:#f7f5ef;      /* 紙面 */
+    --card:#ffffff;
+    --line:#e2ddd0;       /* 罫線 */
+    --call:#1f6fb2;       /* コール＝青 */
+    --put:#c14a78;        /* プット＝桃 */
+    --warm:#c97b2c;       /* アクセント（IV/警告） */
+    --warm-bg:#f5ead9;
+    --green:#3b8f5f;
+    --green-bg:#e3f0e7;
+    --navy:#16202e;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Segoe UI",sans-serif;
+    line-height:1.85;-webkit-font-smoothing:antialiased;}
+
+  /* ナビ */
+  .topnav{background:var(--navy);padding:10px 20px;display:flex;gap:10px;
+    flex-wrap:wrap;align-items:center;position:sticky;top:0;z-index:10;}
+  .topnav a{color:#9fc3e6;text-decoration:none;font-size:13px;padding:4px 10px;
+    border:1px solid #2c3a4d;border-radius:6px;}
+  .topnav a.active{background:#22354b;color:#cfe3f5;border-color:#3a82d6;}
+  .topnav .brand{color:#e6eef7;font-size:13px;font-weight:600;margin-right:6px;}
+
+  .wrap{max-width:820px;margin:0 auto;padding:0 24px 80px;}
+
+  /* ヒーロー */
+  header.hero{padding:64px 0 40px;border-bottom:3px solid var(--ink);margin-bottom:8px;}
+  .eyebrow{font-size:13px;letter-spacing:.18em;color:var(--warm);
+    font-weight:700;text-transform:uppercase;margin-bottom:14px;}
+  h1{font-size:38px;line-height:1.25;margin:0 0 18px;font-weight:800;letter-spacing:-.01em;}
+  .lead{font-size:18px;color:var(--ink-soft);margin:0;max-width:640px;}
+
+  /* 目次 */
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:22px 26px;margin:36px 0;}
+  .toc h2{font-size:14px;letter-spacing:.1em;color:var(--ink-soft);margin:0 0 14px;
+    text-transform:uppercase;font-weight:700;}
+  .toc ol{margin:0;padding-left:0;list-style:none;counter-reset:toc;}
+  .toc li{counter-increment:toc;padding:6px 0;border-bottom:1px dashed var(--line);}
+  .toc li:last-child{border-bottom:none;}
+  .toc a{color:var(--ink);text-decoration:none;font-size:15px;display:flex;gap:14px;align-items:baseline;}
+  .toc a:hover{color:var(--call);}
+  .toc a::before{content:counter(toc,decimal-leading-zero);color:var(--warm);
+    font-weight:700;font-size:13px;font-variant-numeric:tabular-nums;min-width:24px;}
+
+  section{margin:54px 0;scroll-margin-top:64px;}
+  .sec-num{font-size:13px;color:var(--warm);font-weight:700;letter-spacing:.14em;}
+  h2.title{font-size:27px;margin:6px 0 18px;font-weight:800;line-height:1.3;}
+  h3{font-size:19px;margin:30px 0 10px;font-weight:700;}
+  p{margin:14px 0;}
+  strong{font-weight:700;}
+
+  .callbox{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--call);
+    border-radius:0 10px 10px 0;padding:16px 20px;margin:22px 0;}
+  .callbox.put{border-left-color:var(--put);}
+  .callbox.warm{border-left-color:var(--warm);background:var(--warm-bg);border-color:#ecdcc2;}
+  .callbox.green{border-left-color:var(--green);background:var(--green-bg);border-color:#cfe5d8;}
+  .callbox h4{margin:0 0 6px;font-size:15px;font-weight:700;}
+
+  .keyterm{display:grid;grid-template-columns:140px 1fr;gap:4px 18px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:18px 22px;margin:20px 0;}
+  .keyterm dt{font-weight:700;color:var(--call);font-size:15px;}
+  .keyterm dd{margin:0;color:var(--ink-soft);font-size:15px;}
+  .keyterm dt,.keyterm dd{padding:7px 0;border-top:1px solid var(--line);}
+  .keyterm dt:first-of-type,.keyterm dd:first-of-type{border-top:none;}
+
+  table.read{width:100%;border-collapse:collapse;margin:20px 0;font-size:14.5px;}
+  table.read th,table.read td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.read th{background:var(--navy);color:#dde8f2;font-weight:600;font-size:13px;}
+  table.read tr:nth-child(even) td{background:#fbfaf6;}
+  .tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;}
+  .tag.up{background:var(--green-bg);color:var(--green);}
+  .tag.down{background:#f6e0e8;color:var(--put);}
+  .tag.iv{background:var(--warm-bg);color:var(--warm);}
+
+  .step{display:flex;gap:16px;margin:18px 0;align-items:flex-start;}
+  .step .n{flex:none;width:34px;height:34px;border-radius:50%;background:var(--navy);
+    color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;}
+  .step .b{flex:1;}
+  .step .b h4{margin:4px 0 4px;font-size:16px;}
+
+  .disclaimer{background:#fbeeee;border:1px solid #e6c4c4;border-radius:10px;
+    padding:18px 22px;margin:40px 0 0;font-size:13.5px;color:#7a3030;}
+  .disclaimer strong{color:#5a1f1f;}
+
+  footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--line);
+    font-size:13px;color:var(--ink-soft);}
+
+  @media(max-width:600px){
+    h1{font-size:29px;} h2.title{font-size:23px;}
+    .keyterm{grid-template-columns:1fr;}
+    .keyterm dd{padding-top:0;border-top:none;}
+    .keyterm dt{border-top:1px solid var(--line);}
+  }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <span class="brand">日経225ミニOP</span>
+  <a href="guide.html" class="active">使い方ガイド</a>
+  <a href="dashboard.html">IVスマイル</a>
+  <a href="price_dashboard.html">価格マルチ</a>
+  <a href="heatmap_dashboard.html">IVヒートマップ</a>
+</nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">はじめての人のための</div>
+  <h1>3つのダッシュボードで<br>相場の「空気」を読む</h1>
+  <p class="lead">価格だけでなく、市場が織り込む「期待のブレ幅」＝インプライド・ボラティリティ（IV）を見て、いつ・どの権利行使価格を売買するか判断するための入門ガイドです。</p>
+</header>
+
+<div class="toc">
+  <h2>このガイドの流れ</h2>
+  <ol>
+    <li><a href="#basics">そもそもオプションとIVとは</a></li>
+    <li><a href="#smile">IVスマイルの読み方</a></li>
+    <li><a href="#price">価格マルチチャートの読み方</a></li>
+    <li><a href="#heatmap">IVヒートマップの読み方</a></li>
+    <li><a href="#strategy">読んだシグナルを売買に結びつける</a></li>
+    <li><a href="#routine">毎日の見る順番（ルーティン）</a></li>
+  </ol>
+</div>
+
+<section id="basics">
+  <div class="sec-num">01</div>
+  <h2 class="title">そもそもオプションとIVとは</h2>
+  <p>オプションは「ある価格（権利行使価格）で、将来売買できる権利」を売り買いする商品です。買う権利を<strong>コール</strong>、売る権利を<strong>プット</strong>と呼びます。日経225ミニオプションは、日経平均（正確には日経225ミニ先物）を対象にした、取引単位の小さいオプションです。</p>
+
+  <p>初心者がまず押さえるべきは、オプションの値段（プレミアム）が2つの要素で動くということです。ひとつは日経平均が上がった・下がったという<strong>方向</strong>。もうひとつが、これから相場がどれだけ大きく動きそうか、という<strong>期待のブレ幅</strong>です。この「ブレ幅の期待値」を数値化したものが <strong>IV（インプライド・ボラティリティ）</strong> です。</p>
+
+  <div class="keyterm">
+    <dt>権利行使価格</dt><dd>その権利が行使できる価格。「ストライク」とも。例：70000円のコール。</dd>
+    <dt>プレミアム</dt><dd>オプションそのものの値段。ダッシュボードの「現在値」がこれ。</dd>
+    <dt>IV</dt><dd>市場が織り込む将来の変動率（年率%）。大きいほど「荒れる」と見られている。</dd>
+    <dt>ATM</dt><dd>At The Money。今の日経平均にいちばん近い権利行使価格。最も活発に取引される。</dd>
+    <dt>OTM</dt><dd>Out of The Money。今は権利行使しても得しない、価格的に外れた行使価格。</dd>
+  </div>
+
+  <div class="callbox warm">
+    <h4>なぜ価格でなくIVを見るのか</h4>
+    <p style="margin:0;">同じ「日経平均が上がると思う」でも、IVが高い（オプションが割高）ときに買うと、予想が当たっても利益が出にくいことがあります。IVは「オプションの割高・割安」を測る体温計です。だからこのダッシュボード群はIVを主役にしています。</p>
+  </div>
+</section>
+
+<section id="smile">
+  <div class="sec-num">02</div>
+  <h2 class="title">IVスマイルの読み方</h2>
+  <p>横軸が権利行使価格、縦軸がIVのグラフです。多くの場合、両端（高い行使価格と低い行使価格）でIVが高く、真ん中（ATM付近）で低い、笑った口のような曲線になります。これが「スマイル」の由来です。</p>
+
+  <h3>まず形を見る</h3>
+  <p>日経のような株価指数では、左右対称の笑顔ではなく、<strong>低い行使価格（下方）ほどIVが高い右肩下がり</strong>になりがちです。これは「暴落への備え（プット買い）」の需要が常にあるためで、<strong>スキュー（歪み）</strong>と呼びます。下方のIVがATMよりどれだけ高いかを示すのが、画面上部の「下方スキュー」カードです。</p>
+
+  <table class="read">
+    <tr><th>見えること</th><th>意味</th><th>ヒント</th></tr>
+    <tr><td>下方スキューが大きい</td><td>下落への警戒が強い</td><td><span class="tag down">弱気・ヘッジ需要</span></td></tr>
+    <tr><td>曲線全体が上に持ち上がる</td><td>相場全体が荒れる予想</td><td><span class="tag iv">IV上昇</span></td></tr>
+    <tr><td>曲線全体が下に沈む</td><td>市場が落ち着いている</td><td><span class="tag up">IV低下</span></td></tr>
+    <tr><td>ATM IVが低い</td><td>当面は小動き予想</td><td><span class="tag up">凪</span></td></tr>
+  </table>
+
+  <h3>時間で動かす</h3>
+  <p>時刻スライダーを動かすと、スマイルが時間とともにどう変化したかが見えます。「始点と比較」にチェックを入れると、最初の時点（灰色の点線）と今を重ねられます。<strong>曲線が上に移動していれば、その間にIVが上がった＝オプションが買われて割高方向に動いた</strong>ということです。</p>
+
+  <div class="callbox green">
+    <h4>OTM側IV（推奨）を使う理由</h4>
+    <p style="margin:0;">ATMより上はコール、下はプットのIVを採用すると、最も信頼できる滑らかなスマイルになります。深く外れたオプションは取引が薄く、コールIVが時々跳ねるためです。チェックを入れて使うのがおすすめです。</p>
+  </div>
+</section>
+
+<section id="price">
+  <div class="sec-num">03</div>
+  <h2 class="title">価格マルチチャートの読み方</h2>
+  <p>権利行使価格ごとに、コール価格（青）とプット価格（桃の点線）の時間推移を小さなチャートで並べたものです。ATMの行使価格は枠が青くハイライトされます。「多数の値動きを一目で」見るための画面です。</p>
+
+  <h3>同時に動くか、逆に動くか</h3>
+  <p>日経平均が上がると、コール価格は上がり、プット価格は下がるのが基本です。多数のセルを一望して、<strong>青(コール)が全体的に上向き／桃(プット)が下向きなら、相場は上昇局面</strong>と読めます。逆に桃が一斉に立ち上がってきたら、下落が進んでいるサインです。</p>
+
+  <table class="read">
+    <tr><th>多くのセルで…</th><th>相場の状態</th><th></th></tr>
+    <tr><td>青(コール)が上昇</td><td>日経が上がっている</td><td><span class="tag up">上昇</span></td></tr>
+    <tr><td>桃(プット)が上昇</td><td>日経が下がっている</td><td><span class="tag down">下落</span></td></tr>
+    <tr><td>青も桃も上昇</td><td>方向は不明だがIV急騰（荒れ）</td><td><span class="tag iv">変動拡大</span></td></tr>
+    <tr><td>青も桃も横ばい</td><td>動意薄・様子見</td><td><span class="tag up">小動き</span></td></tr>
+  </table>
+
+  <div class="callbox">
+    <h4>「0」は値段ではなく「取引が無い」</h4>
+    <p style="margin:0;">線が途切れているのは、その時刻にその行使価格の取引・気配が無かったためです。途切れの多いセル（深く外れた行使価格）は流動性が低く、実際に売買するとスプレッド（売値と買値の差）が広くて不利になりがちです。<strong>線が連続しているATM周辺ほど取引しやすい</strong>と覚えてください。</p>
+  </div>
+</section>
+
+<section id="heatmap">
+  <div class="sec-num">04</div>
+  <h2 class="title">IVヒートマップの読み方</h2>
+  <p>縦に権利行使価格、横に時刻を並べ、IVの高さを色で表します。青が低い、赤が高い。<strong>どの行使価格のIVが、いつ動いたか</strong>を、色の面でまとめて掴むための画面です。</p>
+
+  <h3>縦の色と横の色</h3>
+  <p>縦方向（同じ時刻で上下）に色を見ると、スマイルと同じ情報＝どの行使価格のIVが高いかが分かります。横方向（同じ行使価格で時間が進む）に色の変化を見ると、<strong>時間とともにIVが上がった（青→赤）か、下がった（赤→青）か</strong>が分かります。</p>
+
+  <table class="read">
+    <tr><th>色の見え方</th><th>意味</th><th></th></tr>
+    <tr><td>右へ進むほど赤くなる</td><td>IVが上昇中。警戒や思惑が高まっている</td><td><span class="tag iv">IV上昇</span></td></tr>
+    <tr><td>右へ進むほど青くなる</td><td>IVが低下中。相場が落ち着いてきた</td><td><span class="tag up">IV低下</span></td></tr>
+    <tr><td>下半分が赤く偏る</td><td>下方IVが高い＝下落ヘッジ需要</td><td><span class="tag down">スキュー</span></td></tr>
+    <tr><td>急に一列だけ赤が走る</td><td>その時刻に何か（ニュース等）が起きた</td><td><span class="tag iv">イベント</span></td></tr>
+  </table>
+
+  <div class="callbox warm">
+    <h4>ヒートマップが得意なこと</h4>
+    <p style="margin:0;">スマイルは「ある瞬間の形」、ヒートマップは「時間を通じた変化」が得意です。寄り付きから引けにかけてIVがじわじわ上がったのか、特定の時刻に跳ねたのかは、ヒートマップの横の色変化が最も分かりやすく教えてくれます。</p>
+  </div>
+</section>
+
+<section id="strategy">
+  <div class="sec-num">05</div>
+  <h2 class="title">読んだシグナルを売買に結びつける</h2>
+  <p>ここからは、読み取った状態を実際の売買方針にどうつなげるかの考え方です。オプションには「買い」と「売り」があり、<strong>IVが安いと思えば買い、高いと思えば売り</strong>が基本の発想になります。</p>
+
+  <h3>IVの水準で方針が変わる</h3>
+  <table class="read">
+    <tr><th>ダッシュボードの状態</th><th>解釈</th><th>とりうる方針の例</th></tr>
+    <tr><td>スマイル全体が低い／ヒートマップが青い</td><td>オプションが割安</td><td>買い戦略が向きやすい（コール買い・プット買い等）</td></tr>
+    <tr><td>スマイル全体が高い／ヒートマップが赤い</td><td>オプションが割高</td><td>売り戦略が選択肢に（ただしリスク大、上級者向け）</td></tr>
+    <tr><td>下方スキューが急拡大</td><td>下落不安が急増</td><td>プット買いでヘッジ、または逆張りの判断材料</td></tr>
+    <tr><td>価格マルチで青が一斉上昇</td><td>上昇トレンド進行</td><td>押し目でのコール買いを検討</td></tr>
+  </table>
+
+  <div class="callbox put">
+    <h4>「売り」は初心者には勧めません</h4>
+    <p style="margin:0;">IVが高いときのオプション売りは、当たれば手堅い反面、相場が急変すると損失が理論上とても大きくなります（特にコール売り・裸売り）。まずは損失が払ったプレミアムに限定される<strong>「買い」から</strong>慣れるのが安全です。</p>
+  </div>
+
+  <h3>3画面を組み合わせた判断の例</h3>
+  <div class="step"><div class="n">1</div><div class="b">
+    <h4>ヒートマップで全体の温度を見る</h4>
+    <p style="margin:0;">今日はIVが上がっている局面か、下がっている局面か。買い場(青)か売り場(赤)かの当たりをつける。</p>
+  </div></div>
+  <div class="step"><div class="n">2</div><div class="b">
+    <h4>スマイルで歪みと水準を確認する</h4>
+    <p style="margin:0;">下方スキューの大きさで弱気の度合いを測り、ATM IVで「割高・割安」を具体数値で押さえる。</p>
+  </div></div>
+  <div class="step"><div class="n">3</div><div class="b">
+    <h4>価格マルチで実際に売買する行使価格を選ぶ</h4>
+    <p style="margin:0;">線が連続している（＝流動性のある）ATM近辺の行使価格から、方向観に合うコール/プットを選ぶ。</p>
+  </div></div>
+
+  <div class="callbox green">
+    <h4>「予想が当たる」と「儲かる」は別</h4>
+    <p style="margin:0;">方向が当たっても、買った時のIVが高すぎると利益が削られます。エントリー前に必ずIVの水準（スマイルの高さ・ヒートマップの色）を確認する癖をつけると、勝率と収益が噛み合いやすくなります。</p>
+  </div>
+</section>
+
+<section id="routine">
+  <div class="sec-num">06</div>
+  <h2 class="title">毎日の見る順番（ルーティン）</h2>
+  <p>慣れるまでは、この順番で3画面を巡回するのがおすすめです。「全体→形→個別」と視点を絞り込んでいく流れです。</p>
+
+  <div class="step"><div class="n">1</div><div class="b">
+    <h4>ヒートマップ｜きょうの地合い</h4>
+    <p style="margin:0;">青寄りか赤寄りか。前日からIVが上がったか下がったか。</p>
+  </div></div>
+  <div class="step"><div class="n">2</div><div class="b">
+    <h4>IVスマイル｜歪みと水準</h4>
+    <p style="margin:0;">下方スキューとATM IVを数値で記録。時間スライダーで日中の変化も確認。</p>
+  </div></div>
+  <div class="step"><div class="n">3</div><div class="b">
+    <h4>価格マルチ｜売買対象の選定</h4>
+    <p style="margin:0;">流動性のある行使価格で、方向観に合うものを絞る。</p>
+  </div></div>
+
+  <div class="callbox warm">
+    <h4>記録をつける</h4>
+    <p style="margin:0;">毎日「ATM IV・下方スキュー・地合いの色」をメモするだけで、IVの高い・低いの自分なりの基準（平常時はIV何%くらいか）が身につきます。これが割高・割安判断のいちばんの土台になります。</p>
+  </div>
+</section>
+
+<div class="disclaimer">
+  <strong>免責事項</strong>　本ガイドはダッシュボードの見方を説明する教育目的の資料であり、特定の銘柄・取引を推奨するものではありません。オプション取引は、相場の急変により投資元本を上回る損失が生じる可能性があります（特に売り建ての場合）。実際の売買はご自身の判断と責任で行い、必要に応じて証券会社の説明資料やリスク説明書をご確認ください。記載のIVや価格はツール上の参考値であり、約定を保証するものではありません。
+</div>
+
+<footer>
+  日経225ミニオプション IVダッシュボード ／ 使い方ガイド（入門編）<br>
+  上部メニューから各ダッシュボードへ移動できます。
+</footer>
+
+</div>
+</body>
+</html>
