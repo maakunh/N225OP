@@ -14,6 +14,7 @@ Dim Running As Boolean
 Dim ExportCounter As Long
 Dim PrevG1Val As String      ' 前回のG1値(変化検知用)
 Dim LastAliveTime As Date    ' G1が最後に変化したPC実時刻
+Dim LastUnderlying As String ' 先物ミニ現在値(Live!F1)の退避
 
 Const INTERVAL As String = "00:01:00"           ' ログ間隔
 Const FIRST_DATA_ROW As Long = 4                ' Liveのデータ開始行
@@ -66,6 +67,13 @@ Sub LogSnapshot()
     If curG1 <> PrevG1Val Then
         LastAliveTime = Now
         PrevG1Val = curG1
+    End If
+
+    ' 先物ミニ現在値(F1)を退避。ATM判定の原資産に使う
+    If IsError(wsLive.Range("F1").Value) Then
+        LastUnderlying = ""
+    Else
+        LastUnderlying = NzV(wsLive.Range("F1").Value)
     End If
 
     Dim n As Long
@@ -154,7 +162,14 @@ Sub ExportDataJs()
     Else
         aliveStr = Format(LastAliveTime, "yyyy-mm-dd hh:mm:ss")
     End If
-    sb = sb & vbCrLf & "window.OPTION_META = {lastAlive:""" & aliveStr & """};"
+    Dim uOut As String
+    If LastUnderlying = "" Or LastUnderlying = "0" Then
+        uOut = "null"
+    Else
+        uOut = LastUnderlying
+    End If
+    sb = sb & vbCrLf & "window.OPTION_META = {lastAlive:""" & aliveStr & _
+         """,underlying:" & uOut & "};"
 
     Dim stream As Object
     Set stream = CreateObject("ADODB.Stream")

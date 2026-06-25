@@ -20,6 +20,8 @@
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
   .cell{background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;padding:6px 8px;}
   .cell.atm{border-color:#3a82d6;}
+  .atmbadge{display:inline-block;margin-left:5px;padding:0 5px;font-size:9px;font-weight:700;
+    line-height:14px;color:#cfe3f5;background:#22354b;border:1px solid #3a82d6;border-radius:4px;vertical-align:middle;}
   .cell h4{margin:0 0 2px;font-size:12px;font-weight:600;display:flex;justify-content:space-between;align-items:baseline;}
   .cell h4 .px{font-size:11px;color:#8a8f99;font-weight:400;}
   .cw{position:relative;height:96px;}
@@ -59,8 +61,15 @@
 <div class="grid" id="grid"></div>
 
 <script>
-const ATM=70000;
+const ATM_DEFAULT=70000;
+let ATM=ATM_DEFAULT;
 let byStrike={},times=[],charts=[],mode='price';
+function resolveATM(){
+  const u=window.OPTION_META&&window.OPTION_META.underlying;
+  const all=Object.keys(byStrike).map(Number);
+  if(u==null||!isFinite(u)||!all.length){ATM=ATM_DEFAULT;return;}
+  ATM=all.reduce((best,k)=>Math.abs(k-u)<Math.abs(best-u)?k:best,all[0]);
+}
 function prep(){byStrike={};const seenT={};
   (window.OPTION_DATA||[]).forEach(r=>{const t=r[0],k=+r[1];
     if(!byStrike[k])byStrike[k]=[];
@@ -88,12 +97,14 @@ function lastLabel(series){
 
 function render(){const n=+document.getElementById('rangeSlider').value;
   document.getElementById('rangeLabel').textContent=n;
+  resolveATM();
   const strikes=pickStrikes(n);charts.forEach(c=>c.destroy());charts=[];
   const grid=document.getElementById('grid');grid.innerHTML='';
   strikes.forEach(k=>{const series=byStrike[k];
     const cell=document.createElement('div');cell.className='cell'+(k===ATM?' atm':'');
     const h=document.createElement('h4');
-    h.innerHTML='<span>'+k.toLocaleString()+'</span><span class="px">'+lastLabel(series)+'</span>';
+    const badge=(k===ATM)?'<span class="atmbadge">ATM</span>':'';
+    h.innerHTML='<span>'+k.toLocaleString()+badge+'</span><span class="px">'+lastLabel(series)+'</span>';
     cell.appendChild(h);
     const wrap=document.createElement('div');wrap.className='cw';
     const cv=document.createElement('canvas');wrap.appendChild(cv);
@@ -113,8 +124,10 @@ function render(){const n=+document.getElementById('rangeSlider').value;
         scales:{x:{display:false},
           y:{ticks:{color:'#8a8f99',font:{size:9},maxTicksLimit:4},grid:{color:'rgba(128,128,128,0.1)'}}}}});
     charts.push(ch);});
+  const u=window.OPTION_META&&window.OPTION_META.underlying;
+  const atmInfo='ATM '+ATM.toLocaleString()+(isFinite(u)&&u!=null?'（ミニ '+(+u).toLocaleString()+'）':'');
   document.getElementById('status').textContent=
-    strikes.length+'銘柄 / '+times.length+'時点 / '+(mode==='price'?'価格':'IV')+'表示';}
+    strikes.length+'銘柄 / '+times.length+'時点 / '+(mode==='price'?'価格':'IV')+'表示 / '+atmInfo;}
 
 function setMode(m){
   mode=m;
