@@ -26,16 +26,19 @@
   .legbar{width:120px;height:12px;border-radius:3px;
     background:linear-gradient(90deg,#2c7bb6,#abd9e9,#ffffbf,#fdae61,#d7191c);}
   #status{font-size:12px;color:#8a8f99;}
+  #stallBar{display:none;background:#5a1a1a;color:#ffd9d9;border:1px solid #d4537e;
+    border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px;font-weight:600;}
 </style>
 </head>
 <body>
 <h1>日経225ミニオプション IVヒートマップ（行使価格 × 時刻）</h1>
 <nav>
-  <a href="guide.html">使い方ガイド</a>
   <a href="dashboard.html">IVスマイル</a>
-  <a href="price_dashboard.html">価格マルチ</a>
+  <a href="price_dashboard.html">価格/IVマルチ</a>
   <a href="heatmap_dashboard.html" class="active">IVヒートマップ</a>
 </nav>
+
+<div id="stallBar"></div>
 
 <div class="row">
   <label>種別</label>
@@ -93,7 +96,29 @@ function render(){const n=+document.getElementById('rangeSlider').value;
   document.getElementById('hm').innerHTML=html;
   document.getElementById('status').textContent=
     strikes.length+'銘柄 / '+times.length+'時点 / IV '+(isFinite(min)?min.toFixed(1):'—')+'〜'+(isFinite(max)?max.toFixed(1):'—');}
-function init(){if(!window.OPTION_DATA){
+function checkStall(){
+  const STALL_SEC=420;
+  const meta=window.OPTION_META;
+  let stalled=false, ageSec=null;
+  if(meta&&meta.lastAlive){
+    const last=new Date(meta.lastAlive.replace(' ','T'));
+    ageSec=(Date.now()-last.getTime())/1000;
+    stalled=ageSec>STALL_SEC;
+  }else{
+    stalled=true;
+  }
+  const bar=document.getElementById('stallBar');
+  if(stalled){
+    bar.style.display='block';
+    bar.textContent='⚠ データ更新が停止しています'
+      +(ageSec!=null?'（最終更新から約'+Math.floor(ageSec/60)+'分経過）':'')
+      +' — MarketSpeed II の接続を確認してください';
+  }else{
+    bar.style.display='none';
+  }
+}
+function init(){checkStall();setInterval(checkStall,30000);
+  if(!window.OPTION_DATA){
     document.getElementById('status').textContent='data.js が読み込めません';return;}
   prep();
   document.getElementById('rangeSlider').addEventListener('input',render);

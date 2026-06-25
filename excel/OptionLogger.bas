@@ -1,4 +1,3 @@
-Attribute VB_Name = "OptionLogger"
 '==========================================================
 ' 日経225ミニOP ログ取得 + data.js自動更新
 ' OneDrive対応・固定フォルダ版
@@ -6,13 +5,15 @@ Attribute VB_Name = "OptionLogger"
 ' 使い方:
 '   1. VBエディタ(Alt+F11)で「ファイル」→「ファイルのインポート」からこの.basを取り込む
 '   2. DASH_FOLDER を任意の出力先(OneDrive外推奨)に設定
-'   3. 3つのHTMLとguide.htmlをDASH_FOLDERに置く(data.jsは自動生成)
+'   3. 3つのHTMLをDASH_FOLDERに置く(data.jsは自動生成)
 '   4. StartLogging で取得開始 / OpenDashboards でブラウザ表示 / StopLogging で停止
 '==========================================================
 
 Dim NextRun As Date
 Dim Running As Boolean
 Dim ExportCounter As Long
+Dim PrevG1Val As String      ' 前回のG1値(変化検知用)
+Dim LastAliveTime As Date    ' G1が最後に変化したPC実時刻
 
 Const INTERVAL As String = "00:01:00"           ' ログ間隔
 Const FIRST_DATA_ROW As Long = 4                ' Liveのデータ開始行
@@ -54,6 +55,18 @@ Sub LogSnapshot()
     Dim wsLive As Worksheet, wsLog As Worksheet
     Set wsLive = ThisWorkbook.Sheets("Live")
     Set wsLog = ThisWorkbook.Sheets("Log")
+
+    ' G1(MS2取得の時刻)が動いているか監視。変化したら実時刻を記録
+    Dim curG1 As String
+    If IsError(wsLive.Range("G1").Value) Then
+        curG1 = "(err)"
+    Else
+        curG1 = CStr(wsLive.Range("G1").Value)
+    End If
+    If curG1 <> PrevG1Val Then
+        LastAliveTime = Now
+        PrevG1Val = curG1
+    End If
 
     Dim n As Long
     n = Application.WorksheetFunction.Count(wsLive.Range("A" & FIRST_DATA_ROW & ":A100000"))
@@ -133,6 +146,15 @@ Sub ExportDataJs()
     Next i
     Dim sb As String
     sb = "window.OPTION_DATA = [" & vbCrLf & Join(parts, "," & vbCrLf) & vbCrLf & "];"
+
+    ' ストール検知用メタ情報(G1が最後に動いた実時刻)。未取得時は空文字
+    Dim aliveStr As String
+    If LastAliveTime = 0 Then
+        aliveStr = ""
+    Else
+        aliveStr = Format(LastAliveTime, "yyyy-mm-dd hh:mm:ss")
+    End If
+    sb = sb & vbCrLf & "window.OPTION_META = {lastAlive:""" & aliveStr & """};"
 
     Dim stream As Object
     Set stream = CreateObject("ADODB.Stream")

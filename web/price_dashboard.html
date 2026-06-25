@@ -29,6 +29,8 @@
   .toggle{display:inline-flex;border:1px solid #2a2e38;border-radius:6px;overflow:hidden;}
   .toggle button{border:none;border-radius:0;padding:5px 16px;background:#1a1d24;color:#8a8f99;font-weight:600;}
   .toggle button.on{background:#22354b;color:#cfe3f5;}
+  #stallBar{display:none;background:#5a1a1a;color:#ffd9d9;border:1px solid #d4537e;
+    border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px;font-weight:600;}
 </style>
 </head>
 <body>
@@ -38,6 +40,8 @@
   <a href="price_dashboard.html" class="active">価格/IVマルチ</a>
   <a href="heatmap_dashboard.html">IVヒートマップ</a>
 </nav>
+
+<div id="stallBar"></div>
 
 <div class="row">
   <div class="toggle">
@@ -121,7 +125,31 @@ function setMode(m){
   render();
 }
 
-function init(){if(!window.OPTION_DATA){
+function checkStall(){
+  const STALL_SEC=420;  // この秒数だけG1が更新されなければアラート（自動リロード5分より長め）
+  const meta=window.OPTION_META;
+  let stalled=false, ageSec=null;
+  if(meta&&meta.lastAlive){
+    const last=new Date(meta.lastAlive.replace(' ','T'));
+    ageSec=(Date.now()-last.getTime())/1000;
+    stalled=ageSec>STALL_SEC;
+  }else{
+    stalled=true;  // メタ情報自体が無い＝data.jsが古いか異常
+  }
+  const bar=document.getElementById('stallBar');
+  if(stalled){
+    bar.style.display='block';
+    bar.textContent='⚠ データ更新が停止しています'
+      +(ageSec!=null?'（最終更新から約'+Math.floor(ageSec/60)+'分経過）':'')
+      +' — MarketSpeed II の接続を確認してください';
+  }else{
+    bar.style.display='none';
+  }
+}
+
+function init(){
+  checkStall();setInterval(checkStall,30000);  // ストール監視（データ有無に関わらず先に起動）
+  if(!window.OPTION_DATA){
     document.getElementById('status').textContent='data.js が読み込めません';return;}
   prep();
   document.getElementById('rangeSlider').addEventListener('input',render);
