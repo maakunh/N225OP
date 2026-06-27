@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>日経225ミニOP IVスマイル</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="data.js"></script>
+<script src="data_hourly.js"></script>
 <style>
   body{font-family:"Segoe UI","Hiragino Kaku Gothic ProN",sans-serif;margin:0;padding:16px;background:#0f1115;color:#e6e6e6;}
   h1{font-size:16px;font-weight:600;margin:0 0 4px;}
@@ -35,6 +35,7 @@
   <a href="dashboard.html" class="active">IVスマイル</a>
   <a href="price_dashboard.html">価格/IVマルチ</a>
   <a href="heatmap_dashboard.html">IVヒートマップ</a>
+  <a href="futures_dashboard.html">先物/NT倍率</a>
 </nav>
 
 <div id="stallBar"></div>
@@ -66,8 +67,8 @@
 <script>
 const ATM=70000;
 let chart,byTime={},times=[],playTimer=null;
-function groupData(){byTime={};if(!window.OPTION_DATA)return;
-  window.OPTION_DATA.forEach(r=>{const t=r[0];if(!byTime[t])byTime[t]=[];
+function groupData(){byTime={};if(!window.OPTION_DATA_H)return;
+  window.OPTION_DATA_H.forEach(r=>{const t=r[0];if(!byTime[t])byTime[t]=[];
     byTime[t].push({k:+r[1],cP:+r[2],cIV:+r[3],pP:+r[4],pIV:+r[5]});});
   times=Object.keys(byTime);
   times.forEach(t=>byTime[t].sort((a,b)=>b.k-a.k));}
@@ -130,7 +131,7 @@ function checkStall(){
 }
 function init(){checkStall();setInterval(checkStall,30000);
   groupData();const sl=document.getElementById('tslider');
-  if(!times.length){document.getElementById('tlabel').textContent='data.js が読み込めません';return;}
+  if(!times.length){document.getElementById('tlabel').textContent='data_hourly.js が読み込めません';return;}
   sl.max=times.length-1;sl.value=times.length-1;
   ['tslider','showCall','showPut','showOTM','showPrev'].forEach(id=>{
     document.getElementById(id).addEventListener('input',render);

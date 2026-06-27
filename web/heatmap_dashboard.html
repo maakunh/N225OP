@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>日経225ミニOP IVヒートマップ</title>
-<script src="data.js"></script>
+<script src="data_hourly.js"></script>
 <style>
   body{font-family:"Segoe UI","Hiragino Kaku Gothic ProN",sans-serif;margin:0;padding:16px;background:#0f1115;color:#e6e6e6;}
   h1{font-size:16px;font-weight:600;margin:0 0 4px;}
@@ -36,6 +36,7 @@
   <a href="dashboard.html">IVスマイル</a>
   <a href="price_dashboard.html">価格/IVマルチ</a>
   <a href="heatmap_dashboard.html" class="active">IVヒートマップ</a>
+  <a href="futures_dashboard.html">先物/NT倍率</a>
 </nav>
 
 <div id="stallBar"></div>
@@ -58,11 +59,17 @@
 <div class="hmwrap"><div id="hm"></div></div>
 
 <script>
-const ATM=70000;let byStrike={},times=[];
+const ATM_DEFAULT=70000;let ATM=ATM_DEFAULT;let byStrike={},times=[];
+function resolveATM(){
+  const u=window.OPTION_META&&window.OPTION_META.underlying;
+  const all=Object.keys(byStrike).map(Number);
+  if(u==null||!isFinite(u)||!all.length){ATM=ATM_DEFAULT;return;}
+  ATM=all.reduce((best,k)=>Math.abs(k-u)<Math.abs(best-u)?k:best,all[0]);
+}
 function prep(){byStrike={};const seenT={};
-  (window.OPTION_DATA||[]).forEach(r=>{const t=r[0],k=+r[1];
+  (window.OPTION_DATA_H||[]).forEach(r=>{const t=r[0],k=+r[1];
     if(!byStrike[k])byStrike[k]={};byStrike[k][t]={cIV:+r[3],pIV:+r[5]};seenT[t]=1;});
-  times=Object.keys(seenT);}
+  times=Object.keys(seenT);resolveATM();}
 function pickStrikes(n){const all=Object.keys(byStrike).map(Number).sort((a,b)=>b-a);
   let ci=0,best=1e9;all.forEach((k,i)=>{const d=Math.abs(k-ATM);if(d<best){best=d;ci=i;}});
   const half=Math.floor(n/2);const start=Math.max(0,ci-half);
@@ -94,8 +101,10 @@ function render(){const n=+document.getElementById('rangeSlider').value;
     html+='</tr>';});
   html+='</table>';
   document.getElementById('hm').innerHTML=html;
+  const u=window.OPTION_META&&window.OPTION_META.underlying;
+  const atmInfo='ATM '+ATM.toLocaleString()+(isFinite(u)&&u!=null?'（ミニ '+(+u).toLocaleString()+'）':'');
   document.getElementById('status').textContent=
-    strikes.length+'銘柄 / '+times.length+'時点 / IV '+(isFinite(min)?min.toFixed(1):'—')+'〜'+(isFinite(max)?max.toFixed(1):'—');}
+    strikes.length+'銘柄 / '+times.length+'時点 / IV '+(isFinite(min)?min.toFixed(1):'—')+'〜'+(isFinite(max)?max.toFixed(1):'—')+' / '+atmInfo;}
 function checkStall(){
   const STALL_SEC=420;
   const meta=window.OPTION_META;
@@ -118,8 +127,8 @@ function checkStall(){
   }
 }
 function init(){checkStall();setInterval(checkStall,30000);
-  if(!window.OPTION_DATA){
-    document.getElementById('status').textContent='data.js が読み込めません';return;}
+  if(!window.OPTION_DATA_H){
+    document.getElementById('status').textContent='data_hourly.js が読み込めません';return;}
   prep();
   document.getElementById('rangeSlider').addEventListener('input',render);
   document.getElementById('kind').addEventListener('change',render);

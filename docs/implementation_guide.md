@@ -1,6 +1,6 @@
 # 日経225ミニオプション IV監視ダッシュボード 実装手順書
 
-楽天証券「MarketSpeed II RSS」でリアルタイム取得したオプションデータを Excel に時系列で蓄積し、ブラウザ上の 3 つのダッシュボード（IVスマイル・価格マルチチャート・IVヒートマップ）で可視化する仕組みを、ゼロから構築するための手順書です。
+楽天証券「MarketSpeed II RSS」でリアルタイム取得したオプション・先物データを Excel に時系列で蓄積し、ブラウザ上の 4 つのダッシュボード（IVスマイル・価格/IVマルチチャート・IVヒートマップ・先物/NT倍率）で可視化する仕組みを、ゼロから構築するための手順書です。
 
 ---
 
@@ -9,11 +9,13 @@
 ### この仕組みでできること
 
 - 日経225ミニオプションの全権利行使価格について、コール／プットの「現在値」と「IV（インプライド・ボラティリティ）」を 1 分ごとに自動取得・記録する
-- 記録したデータをブラウザの 3 ダッシュボードで可視化する
-  - **IVスマイル**：ある時点の権利行使価格×IVの曲線。時間変化も再生可能
-  - **価格マルチチャート**：行使価格ごとの価格推移を小チャートで一覧
-  - **IVヒートマップ**：行使価格×時刻のIVを色で表現
-- データ更新はExcelが自動で行い、ブラウザは自動リロードで最新を反映
+- 記録したデータをブラウザの 4 ダッシュボードで可視化する
+  - **IVスマイル**：ある時点の権利行使価格×IVの曲線。時間変化も再生可能（1時間足・最大30日）
+  - **価格/IVマルチチャート**：行使価格ごとの推移を小チャートで一覧。価格⇔IVをトグルで切替（1分足）
+  - **IVヒートマップ**：行使価格×時刻のIVを色で表現（1時間足・最大30日）
+  - **先物/NT倍率**：日経225ミニ先物・ラージ先物・TOPIX先物のローソク足とNT倍率の曲線（別系統・手動更新）
+- オプション系のデータ更新はExcelが自動で行い、ブラウザは自動リロードで最新を反映。先物系は手動マクロで取り直す
+- データ更新の停止（G1の更新停止）を各画面が検知してアラート表示。ATMは先物ミニ現在値から自動判定
 
 ### データの流れ
 
@@ -21,16 +23,25 @@
 MarketSpeed II（起動・ログイン）
         │  RSS関数でリアルタイム取得
         ▼
-Excel「Live」シート（現在値・IVの一覧スナップショット）
+Excel「Live」シート（現在値・IV・先物コードのスナップショット）
         │  VBAが1分ごとに値をコピー
         ▼
 Excel「Log」シート（時系列で縦に蓄積）
-        │  VBAが数分ごとに書き出し
+        │  VBAが数分ごとに2種類を書き出し
+        ├───────────────┐
+        ▼               ▼
+data.js（1分足）    data_hourly.js（1時間足・最大30日）
+        │               │
+        ▼               ▼
+価格/IVマルチ      IVスマイル／IVヒートマップ
+
+［別系統：手動］
+Excel「Chart」シート（RssChartで先物4本値を取得）
+        │  ExportFutures を手動実行
         ▼
-data.js（ブラウザが読めるJavaScript形式のデータ）
-        │  各HTMLが読み込み
+data_futures.js（先物OHLC＋NT倍率）
         ▼
-3つのダッシュボード（ブラウザで表示）
+先物/NT倍率ダッシュボード
 ```
 
 ### 用意するファイル（すべて同じフォルダに置く）
@@ -38,10 +49,13 @@ data.js（ブラウザが読めるJavaScript形式のデータ）
 | ファイル名 | 役割 | 作り方 |
 |---|---|---|
 | `（任意）.xlsm` | RSS関数とVBAを含むExcelブック本体 | 手順2〜5で作成 |
-| `data.js` | 時系列データ（自動生成） | VBAが書き出す |
+| `data.js` | オプション1分足データ（自動生成） | VBAが書き出す |
+| `data_hourly.js` | オプション1時間足・最大30日（自動生成） | VBAが書き出す |
+| `data_futures.js` | 先物OHLC＋NT倍率（手動生成） | `ExportFutures` が書き出す |
 | `dashboard.html` | IVスマイル | 手順6で作成 |
-| `price_dashboard.html` | 価格マルチチャート | 手順6で作成 |
+| `price_dashboard.html` | 価格/IVマルチチャート | 手順6で作成 |
 | `heatmap_dashboard.html` | IVヒートマップ | 手順6で作成 |
+| `futures_dashboard.html` | 先物/NT倍率 | 手順6で作成 |
 | `guide.html` | 使い方ガイド（任意） | 別途配布 |
 
 ---
@@ -75,12 +89,17 @@ data.js（ブラウザが読めるJavaScript形式のデータ）
 
 > ブックを保存しておかないと、VBA が出力先フォルダを特定できず data.js を書き出せません。
 
-### 2-2. シートを2枚用意する
+### 2-2. シートを用意する
 
-ブック内に次の 2 つのシートを作る（シート名は正確に合わせる）。
+ブック内に次のシートを作る（シート名は正確に合わせる）。
 
-- **Live**：RSS関数を並べてリアルタイムのスナップショットを表示するシート
+- **Live**：RSS関数を並べてリアルタイムのスナップショットを表示するシート（オプション＋先物コード）
 - **Log**：1分ごとのスナップショットを時系列で蓄積するシート
+- **Chart**：先物のヒストリカルチャート（`RssChart`）を配置するシート（先物/NT倍率ダッシュボード用。手順8で作成）
+
+> Chart シートは先物ダッシュボードを使う場合のみ必要です。オプション系（IVスマイル・価格/IVマルチ・ヒートマップ）だけなら Live と Log の2枚で動きます。
+
+> **RunLog** シートは、主要マクロの実行ログを記録するために初回実行時に自動作成される（手動で作る必要はない）。
 
 ---
 
@@ -99,6 +118,20 @@ data.js（ブラウザが読めるJavaScript形式のデータ）
 | E | プット銘柄コード |
 | F | プット現在値 |
 | G | プットIV |
+
+さらに、**1行目には次の特殊セル**を置く（ATM動的判定・ストール検知・先物チャート用）。これらは4行目以降のオプション表とは別の、単独セルの値である。
+
+| セル | 内容 | 用途 |
+|---|---|---|
+| B1 | 通常限月（`202507` 形式） | オプション銘柄コード生成・ミニ先物コード |
+| C1 | メジャーSQ限月（3・6・9・12月） | ラージ・TOPIX先物コード生成 |
+| F1 | 先物ミニ現在値 | ATM動的判定（最近接の行使価格をATMに） |
+| G1 | MarketSpeed II 取得時刻 | ストール検知（更新停止の監視軸） |
+| H1 | 日経225ミニ先物の銘柄コード | RssChart 参照 |
+| I1 | 日経225先物（ラージ）の銘柄コード | RssChart 参照（C1を参照して生成） |
+| J1 | TOPIX先物の銘柄コード | RssChart 参照（C1を参照して生成） |
+
+> **先物コードのメジャーSQ制約**：日経225ラージ先物とTOPIX先物は、**メジャーSQ限月（3・6・9・12月）でないと銘柄コードを取得できません**。そのため通常限月（B1）とは別に、メジャーSQ限月を **C1** に持たせ、**I1・J1 は C1 を参照**して銘柄コードを生成します。ミニ先物（H1）は通常限月（B1）ベースで構いません。限月をまたぐ際は B1・C1 を更新します。
 
 見出しの例（1〜3行目）：
 
@@ -171,173 +204,31 @@ data.js（ブラウザが読めるJavaScript形式のデータ）
 
 ## 5. VBAマクロの実装
 
-### 5-1. VBエディタを開く
+### 5-1. マクロの取り込み（インポート方式）
+
+VBAコードは規模が大きく機能追加で更新されるため、本手順書には全文を掲載せず、**別添の `OptionLogger.bas` をインポートする方式**を採る。
 
 1. Excel で `Alt + F11` を押して VBエディタを開く
-2. メニュー「挿入」→「標準モジュール」で新しいモジュールを追加する
-3. 下記コードを**すべて**貼り付ける
+2. メニュー「ファイル」→「ファイルのインポート」を選ぶ
+3. 配布物の `OptionLogger.bas` を選択して取り込む
+4. モジュール先頭の定数を環境に合わせて設定する（次項 5-3）
 
-### 5-2. マクロ全文
+### 5-2. OptionLogger.bas に含まれる機能
 
-```vba
-'==========================================================
-' 日経225ミニOP ログ取得 + data.js自動更新
-'==========================================================
-Dim NextRun As Date
-Dim Running As Boolean
-Dim ExportCounter As Long
+| 機能 | 主なマクロ／処理 | 出力 |
+|---|---|---|
+| ログ取得・自動更新 | `StartLogging` / `StopLogging` / `LogSnapshot` | — |
+| オプション1分足の書き出し | `ExportDataJs` | `data.js` |
+| オプション1時間足（最大30日） | `ExportDataJsHourly` | `data_hourly.js` |
+| 先物/NT倍率（手動） | `ExportFutures` | `data_futures.js` |
+| 先物/NT倍率（自動・60分） | `StartFutures` / `StopFutures` / `FuturesTick` | `data_futures.js` |
+| ストール検知用メタ | G1の最終更新実時刻を記録 | `OPTION_META.lastAlive` |
+| ATM動的判定用メタ | 先物ミニ現在値(F1)を記録 | `OPTION_META.underlying` |
+| ダッシュボードを開く | `OpenDashboards` | — |
+| 緊急停止 | `ForceStopLogging` | — |
+| 実行ログの記録 | `WriteRunLog`（各マクロから自動呼び出し） | `RunLog` シート |
 
-Const INTERVAL As String = "00:01:00"   ' ログ間隔
-Const FIRST_DATA_ROW As Long = 4        ' Liveのデータ開始行
-Const EXPORT_EVERY As Long = 5          ' ログ何回ごとにdata.jsを更新するか
-
-Sub StartLogging()
-    Running = True
-    ExportCounter = 0
-    LogSnapshot
-    MsgBox "ログ取得を開始しました（間隔：" & INTERVAL & "）"
-End Sub
-
-Sub StopLogging()
-    Running = False
-    On Error Resume Next
-    Application.OnTime NextRun, "LogSnapshot", , False
-    On Error GoTo 0
-    MsgBox "ログ取得を停止しました"
-End Sub
-
-Sub LogSnapshot()
-    If Not Running Then Exit Sub
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-    On Error GoTo CleanExit
-
-    Dim wsLive As Worksheet, wsLog As Worksheet
-    Set wsLive = ThisWorkbook.Sheets("Live")
-    Set wsLog = ThisWorkbook.Sheets("Log")
-
-    Dim n As Long
-    n = Application.WorksheetFunction.Count(wsLive.Range("A" & FIRST_DATA_ROW & ":A100000"))
-    If n <= 0 Then GoTo CleanExit
-    Dim lastLiveRow As Long
-    lastLiveRow = FIRST_DATA_ROW + n - 1
-
-    Dim outRow As Long
-    outRow = wsLog.Cells(wsLog.Rows.Count, 2).End(xlUp).Row + 1
-    If outRow < 2 Then outRow = 2
-
-    Dim tStr As String
-    tStr = Format(Now, "yyyy/mm/dd hh:mm:ss")
-
-    Dim outArr() As Variant
-    ReDim outArr(1 To n, 1 To 6)
-    Dim i As Long, k As Long
-    k = 0
-    For i = FIRST_DATA_ROW To lastLiveRow
-        If IsNumeric(wsLive.Cells(i, 1).Value) And wsLive.Cells(i, 1).Value <> "" Then
-            k = k + 1
-            outArr(k, 1) = tStr
-            outArr(k, 2) = wsLive.Cells(i, 1).Value
-            outArr(k, 3) = wsLive.Cells(i, 3).Value
-            outArr(k, 4) = wsLive.Cells(i, 4).Value
-            outArr(k, 5) = wsLive.Cells(i, 6).Value
-            outArr(k, 6) = wsLive.Cells(i, 7).Value
-        End If
-    Next i
-    If k > 0 Then
-        wsLog.Range(wsLog.Cells(outRow, 1), wsLog.Cells(outRow + k - 1, 6)).Value = outArr
-    End If
-
-    ' data.js を間引いて自動更新
-    ExportCounter = ExportCounter + 1
-    If ExportCounter >= EXPORT_EVERY Then
-        ExportCounter = 0
-        On Error Resume Next
-        ExportDataJs
-        On Error GoTo CleanExit
-    End If
-
-CleanExit:
-    Application.EnableEvents = True
-    Application.ScreenUpdating = True
-    If Running Then
-        NextRun = Now + TimeValue(INTERVAL)
-        Application.OnTime NextRun, "LogSnapshot"
-    End If
-End Sub
-
-' data.js を書き出す（ブラウザは開かない）
-Sub ExportDataJs()
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Sheets("Log")
-    Dim lastRow As Long
-    lastRow = ws.Cells(ws.Rows.Count, 2).End(xlUp).Row
-    If lastRow < 2 Then Exit Sub
-    Dim folder As String
-    folder = ThisWorkbook.Path
-    If folder = "" Then Exit Sub
-    Dim jsPath As String
-    jsPath = folder & Application.PathSeparator & "data.js"
-
-    Dim data As Variant
-    data = ws.Range(ws.Cells(2, 1), ws.Cells(lastRow, 6)).Value
-    Dim nRows As Long
-    nRows = UBound(data, 1)
-    Dim parts() As String
-    ReDim parts(1 To nRows)
-    Dim i As Long
-    For i = 1 To nRows
-        parts(i) = "[""" & CStr(data(i, 1)) & """," & _
-                   NzV(data(i, 2)) & "," & NzV(data(i, 3)) & "," & _
-                   NzV(data(i, 4)) & "," & NzV(data(i, 5)) & "," & NzV(data(i, 6)) & "]"
-    Next i
-    Dim sb As String
-    sb = "window.OPTION_DATA = [" & vbCrLf & Join(parts, "," & vbCrLf) & vbCrLf & "];"
-
-    Dim stream As Object
-    Set stream = CreateObject("ADODB.Stream")
-    stream.Type = 2
-    stream.Charset = "UTF-8"
-    stream.Open
-    stream.WriteText sb
-    stream.SaveToFile jsPath, 2
-    stream.Close
-End Sub
-
-Function NzV(v As Variant) As String
-    If IsEmpty(v) Or v = "" Then
-        NzV = "0"
-    ElseIf IsNumeric(v) Then
-        NzV = CStr(v)
-    Else
-        NzV = "0"
-    End If
-End Function
-
-' ダッシュボードを開く
-Sub OpenDashboards()
-    Dim folder As String
-    folder = ThisWorkbook.Path
-    If folder = "" Then MsgBox "先にブックを保存してください": Exit Sub
-    ExportDataJs   ' 最新化してから開く
-    Dim p As String
-    p = folder & Application.PathSeparator & "dashboard.html"
-    If Dir(p) <> "" Then ThisWorkbook.FollowHyperlink p Else MsgBox "dashboard.html がありません: " & folder
-End Sub
-
-' 緊急停止（NextRunが失われた場合の総当たり解除）
-Sub ForceStopLogging()
-    Running = False
-    Dim t As Date, i As Long
-    On Error Resume Next
-    For i = 0 To 480
-        t = (Now - TimeValue("00:01:00")) + TimeValue("00:01:00") * i
-        Application.OnTime EarliestTime:=t, Procedure:="LogSnapshot", Schedule:=False
-    Next i
-    On Error GoTo 0
-    MsgBox "強制停止を試行しました"
-End Sub
-```
+> **VBAの記述位置に関する注意**：モジュールレベルの `Const`・`Dim` は、必ず手続き（Sub/Function）より前、モジュールの先頭に置くこと。手続きの後ろに書くと環境によって無視され、空文字として扱われて「シートが見つかりません」等の不可解なエラーになる。`OptionLogger.bas` は先物用の定数（`FUT_SHEET` など）も含め先頭にまとめてある。
 
 ### 5-3. 設定値の意味
 
@@ -346,6 +237,13 @@ End Sub
 | `INTERVAL` | `"00:01:00"` | ログ取得間隔。5分にするなら `"00:05:00"` |
 | `FIRST_DATA_ROW` | `4` | Liveシートのデータ開始行。レイアウトに合わせる |
 | `EXPORT_EVERY` | `5` | ログ何回ごとにdata.jsを書き出すか（1分間隔×5＝約5分ごと） |
+| `DASH_FOLDER` | `"C:\OptionDash"` | ダッシュボード一式とdata*.jsの出力先（OneDrive外推奨） |
+| `FUT_SHEET` | `"Chart"` | 先物RssChart式を配置したシート名（手順8） |
+| `FUT_FORMULA_ROW` | `2` | Chartシートで各RssChart式を置く行 |
+| `COL_MINI5`〜`COL_TP60` | `1,12,23,34,45` | 各先物系列の式起点列（11列間隔） |
+| `FUT_INTERVAL` | `01:00:00` | 先物自動更新の間隔（StartFutures） |
+| `RUNLOG_SHEET` | `RunLog` | 実行ログのシート名 |
+| `RUNLOG_MAX` | `10000` | 実行ログの最大行数（超えたら古い行から削除） |
 
 ### 5-4. 動作確認
 
@@ -361,23 +259,27 @@ End Sub
 
 ## 6. ダッシュボードHTMLの設置
 
-3つのHTMLファイルを、Excelブックと**同じフォルダ**に作成する。各ファイルは `data.js` を読み込み、ブラウザ上で描画する。文字コードは **UTF-8** で保存すること。
+4つのHTMLファイルを、`DASH_FOLDER`（既定 `C:\OptionDash`）に置く。各ファイルは対応するデータファイル（`data.js` / `data_hourly.js` / `data_futures.js`）を読み込み、ブラウザ上で描画する。文字コードは **UTF-8** で保存すること。
 
-> 各HTMLの全文は付録（このファイル末尾の「付録A〜C」）に掲載。テキストエディタ（メモ帳等）に貼り付け、指定のファイル名で保存する。
+> 各HTMLは配布物の実ファイルをそのまま `DASH_FOLDER` に置く。エディタで開く必要はない。
 
 ### 6-1. ファイル名
 
-| ファイル名 | 内容 |
-|---|---|
-| `dashboard.html` | IVスマイル（時刻スライダー・再生・OTM側IV・スキュー表示） |
-| `price_dashboard.html` | 価格マルチチャート（ATM中心に表示本数可変） |
-| `heatmap_dashboard.html` | IVヒートマップ（コール/プット/OTM切替・色分け） |
+| ファイル名 | 内容 | 読み込むデータ |
+|---|---|---|
+| `dashboard.html` | IVスマイル（時刻スライダー・再生・OTM側IV・スキュー表示。1時間足・最大30日） | `data_hourly.js` |
+| `price_dashboard.html` | 価格/IVマルチチャート（価格⇔IVトグル・ATMバッジ。1分足） | `data.js` |
+| `heatmap_dashboard.html` | IVヒートマップ（コール/プット/OTM切替・色分け・ATM動的。1時間足・最大30日） | `data_hourly.js` |
+| `futures_dashboard.html` | 先物/NT倍率（ローソク足＋NT倍率曲線） | `data_futures.js` |
 
 ### 6-2. 共通の仕様
 
-- 3画面は上部ナビで相互に行き来できる
-- 各画面右上の「自動更新」にチェックを入れると、5分ごとにページが自動リロードされ最新の `data.js` を反映する（チェック状態は画面間で共有）
+- 4画面は上部ナビで相互に行き来できる
+- 各画面右上の「自動更新」にチェックを入れると、5分ごとにページが自動リロードされ最新データを反映する
 - 「0」のデータ（板なし）は線を繋がず飛ばす設計
+- オプション3画面は、G1（取得時刻）の更新が一定時間途絶えると画面上部にアラートバナーを表示（ストール検知）
+- 先物画面は手動更新のため、`data_futures.js` 未生成のときのみ「ExportFutures を実行してください」と表示
+- ローソク足描画のため `futures_dashboard.html` のみ Chart.js financial プラグインと luxon をCDNから追加読み込み
 
 ---
 
@@ -389,13 +291,15 @@ End Sub
 2. Excelブック（.xlsm）を開く（マクロを有効化する）
 3. Liveシートに値が表示されていることを確認する
 4. `StartLogging` を実行する
-5. `OpenDashboards` を実行する（ブラウザでIVスマイルが開く）
-6. ダッシュボード右上の「自動更新」にチェックを入れる
+5. 先物画面を使う場合は `StartFutures` を実行する（60分ごとに自動更新。手動なら `ExportFutures`）
+6. `OpenDashboards` を実行する（ブラウザでIVスマイルが開く）
+7. ダッシュボード右上の「自動更新」にチェックを入れる
 
 ### 7-2. 終了手順
 
 1. `StopLogging`（または `ForceStopLogging`）を実行する
-2. 必要に応じてブックを保存する（Logの蓄積を残す場合）
+2. 先物の自動更新を使っていた場合は `StopFutures` を実行する
+3. 必要に応じてブックを保存する（Logの蓄積を残す場合）
 
 ### 7-3. 運用上の注意
 
@@ -406,7 +310,71 @@ End Sub
 
 ---
 
-## 8. トラブルシューティング
+
+---
+
+## 8. 先物/NT倍率ダッシュボードの構築（任意）
+
+先物画面はオプション系とは独立した別系統。`RssChart` でヒストリカルチャートを取得し、`ExportFutures`（手動マクロ）で `data_futures.js` を書き出す。
+
+### 8-1. Chartシートを作る
+
+`Chart` という名前のシートを用意し、2行目の各列に `RssChart` 式を配置する。銘柄コードは Live シートを参照する（手順3-1の特殊セル）。
+
+| セル | 式 | 系列 | 足種/期間 |
+|---|---|---|---|
+| A2 | `=RssChart(,Live!H1,"5M",300)` | ミニ先物 | 5分足 / 24時間 |
+| L2 | `=RssChart(,Live!I1,"D",260)` | ラージ | 日足 / 1年 |
+| W2 | `=RssChart(,Live!I1,"60M",500)` | ラージ | 60分足 / 30日 |
+| AH2 | `=RssChart(,Live!J1,"D",260)` | TOPIX | 日足 / 1年 |
+| AS2 | `=RssChart(,Live!J1,"60M",500)` | TOPIX | 60分足 / 30日 |
+
+各系列は10列展開＋余白1列の11列間隔で配置（隣の系列とスピルが干渉しないように）。`RssChart` は省略ヘッダー時、`[銘柄名称, 市場名称, 足種, 日付, 時刻, 始値, 高値, 安値, 終値, 出来高]` を式セルの下方向に展開する。
+
+> **メジャーSQ限月の制約**：ラージ・TOPIX先物（I1・J1）はメジャーSQ限月でないと銘柄コードを取得できないため、メジャーSQ限月を Live!C1 に持たせ I1・J1 がこれを参照する（手順3-1参照）。
+
+### 8-2. data_futures.js を書き出す
+
+1. Chartシートに各 `RssChart` のデータが展開されていることを確認する
+2. `ExportFutures` を実行する
+3. `DASH_FOLDER` に `data_futures.js` が生成される
+4. `futures_dashboard.html` をブラウザで開くと、6チャート（ミニ5分足・ラージ日足/60分足・TOPIX日足/60分足のローソク足＋NT倍率の曲線）が表示される
+
+NT倍率はラージ日足終値÷TOPIX日足終値を日付で対応させてVBA側で自動算出する（新規取得は不要）。
+
+> `ExportFutures` は手動・毎回取り直しの別系統。`StartFutures` を実行すると60分ごとに自動更新される（停止は `StopFutures`）。オプションの `StartLogging`（1分ループ）とは独立した別タイマーで動く。データ展開開始行が想定（式セルの1行下）と異なる場合は `FUT_FORMULA_ROW` を、シート名や列を変える場合は `FUT_SHEET` / `COL_*` を調整する。
+
+---
+
+## 9. リモート閲覧（Tailscale）
+
+ダッシュボードを外出先の自分の端末からも見たい場合、Google ドライブ等の公開ホスティングは使えない（HTMLホスティング機能は廃止済みで、`<script src>` の相対参照も成立しない）。代わりに、配信元PCに軽量Webサーバーを立て、Tailscaleで自分の端末だけに見せる方式が手軽で安全。
+
+### 9-1. 配信元PCにWebサーバーを立てる
+
+`DASH_FOLDER` で1コマンド（Python導入済みの場合）。
+
+```
+cd C:\OptionDash
+python -m http.server 8000
+```
+
+Windowsファイアウォールでポート8000の受信許可を追加する（管理者コマンドプロンプト）。
+
+```
+netsh advfirewall firewall add rule name="OptionDash 8000" dir=in action=allow protocol=TCP localport=8000
+```
+
+### 9-2. Tailscaleで自分の端末をつなぐ
+
+1. 配信元PCと、見る側の端末（スマホ・ノートPC）すべてに Tailscale をインストールし、**同じアカウント**でログインする
+2. 見る側のブラウザで `http://<配信元のTailscale名 or 100.x.x.x>:8000/dashboard.html` を開く
+
+公開URLは存在せず、自分のテールネット内の端末からしか到達できないため、他人と共有されない。MarketSpeed II を手動起動する運用なら、Webサーバーも同じタイミングで手動起動すればよく、常時起動（タスクスケジューラ登録）は不要。
+
+> 名前で繋がらないときは IP 直打ち（`100.x.x.x:8000`）を試す。IPで繋がれば経路は正常で、MagicDNS（Tailscale管理コンソールで有効化）の問題。接続がタイムアウトする場合はファイアウォールのポート許可を確認する。
+
+## 10. トラブルシューティング
 
 | 症状 | 主な原因 | 対処 |
 |---|---|---|
@@ -417,12 +385,17 @@ End Sub
 | ダッシュボードが「data.js が読み込めません」 | HTMLに `<script src="data.js">` が無い／別フォルダ | HTMLの`<head>`にscriptタグを追加、同一フォルダに配置 |
 | グラフが更新されない | ブラウザキャッシュ | `Ctrl + F5` で強制再読み込み |
 | 文字化け | data.jsの文字コード | 本手順の `ADODB.Stream`（UTF-8指定）版で書き出す |
+| `ByRef 引数の型が一致しません` | Variantのセル値を `= ""` で比較／Const をByRefで渡す | 空判定を `Len(Trim(CStr(v)))=0` 方式に、補助関数の引数を `ByVal` にする（最新の `OptionLogger.bas` は対応済み） |
+| `「」シートが見つかりません`（先物） | `Chart` シート未作成、または `FUT_SHEET` 定数が手続きの後ろにあり空扱い | `Chart` シートを作る／定数をモジュール先頭に置く（最新版は対応済み） |
+| 先物チャートが空・本数が変 | RssChartのデータ展開開始行のずれ | `FUT_FORMULA_ROW` を実際の展開開始行に合わせる |
+| 先物コードが取得できない | ラージ/TOPIXに通常限月を指定 | メジャーSQ限月を Live!C1 に置き I1・J1 がこれを参照する |
+| リモートで繋がらない（タイムアウト） | Windowsファイアウォールがポート8000を遮断 | `netsh advfirewall` で受信許可を追加（手順9-1） |
 
 ---
 
-## 9. データ構造リファレンス
+## 11. データ構造リファレンス
 
-### 9-1. Logシート（縦持ち）
+### 11-1. Logシート（縦持ち）
 
 | 列 | 内容 | 例 |
 |---|---|---|
@@ -433,7 +406,17 @@ End Sub
 | E | プット現在値 | `2350` |
 | F | プットIV | `36.63` |
 
-### 9-2. data.js
+### 11-2. RunLogシート（実行ログ）
+
+| 列 | 内容 | 例 |
+|---|---|---|
+| A | 日時（文字列） | `2026/06/25 09:00:10` |
+| B | 機能（マクロ名） | `StartLogging` |
+| C | 備考 | `ログ取得開始` |
+
+主要マクロの実行時に1行追記される。データ行数が `RUNLOG_MAX`（既定1万行）を超えると、ヘッダー直下（最古）から超過分が自動削除される。`先物更新` は備考で「手動」と「自動60分」を区別。
+
+### 11-3. data.js / data_hourly.js / data_futures.js
 
 ```javascript
 window.OPTION_DATA = [
@@ -445,23 +428,50 @@ window.OPTION_DATA = [
 
 各要素は `[時刻, 権利行使価格, C現在値, C_IV, P現在値, P_IV]` の配列。HTMLはこれを `window.OPTION_DATA` として読み込み、時刻や行使価格でグループ化して描画する。
 
+`data_hourly.js` は同じ配列形式を `window.OPTION_DATA_H` として持つ（時刻は正時表記 `2026-06-25 10:00`、1時間足・最大30日に間引き済み）。両ファイルとも末尾にメタ情報が付く。
+
+```javascript
+window.OPTION_META = {lastAlive:"2026-06-25 10:00:10", underlying:38520};
+```
+
+`lastAlive` はG1の最終更新実時刻（ストール検知用）、`underlying` は先物ミニ現在値（ATM動的判定用）。
+
+`data_futures.js` は先物6系列とNT倍率を持つ。
+
+```javascript
+window.FUTURES_DATA = {
+  mini5: [{t:"2026-06-25 09:00",o:38500,h:38550,l:38480,c:38520}, ...],
+  lgD:  [{t:"2026-06-24",o:38400,h:38600,l:38350,c:38500}, ...],
+  lg60: [...], tpD: [...], tp60: [...],
+  nt:   [{t:"2026-06-24",v:13.7011}, ...]
+};
+window.FUTURES_META = {generated:"2026-06-25 09:33:10"};
+```
+
+OHLC各系列は `{t,o,h,l,c}`、NT倍率は `{t,v}`。日足は `t` が `yyyy-MM-dd`、分足は `yyyy-MM-dd HH:mm`。
+
 ---
 
 ## 付録A. dashboard.html（IVスマイル）
 
 > ※本文は別添の `dashboard.html` を参照。`<head>` 内で Chart.js（CDN）と `data.js` を読み込み、時刻スライダーでスマイルの時間変化を表示する。
 
-## 付録B. price_dashboard.html（価格マルチチャート）
+## 付録B. price_dashboard.html（価格/IVマルチチャート）
 
-> ※本文は別添の `price_dashboard.html` を参照。行使価格ごとの価格推移を小チャートで格子状に表示する。
+> ※本文は別添の `price_dashboard.html` を参照。行使価格ごとの推移を小チャートで格子状に表示。価格⇔IVトグル、ATM動的判定＋ATMバッジに対応。
 
 ## 付録C. heatmap_dashboard.html（IVヒートマップ）
 
-> ※本文は別添の `heatmap_dashboard.html` を参照。行使価格×時刻のIVを色分け表示する。
+> ※本文は別添の `heatmap_dashboard.html` を参照。行使価格×時刻のIVを色分け表示。ATMは先物ミニ現在値から動的判定。
+
+## 付録D. futures_dashboard.html（先物/NT倍率）
+
+> ※本文は別添の `futures_dashboard.html` を参照。先物6系列のローソク足とNT倍率の曲線を表示。Chart.js financialプラグインとluxonをCDNから追加読み込みする。
 
 ---
 
 ## 改訂メモ
 
 - 本手順書は MarketSpeed II RSS の関数仕様に依存する。RSS関数の項目名・引数はバージョンにより変わることがあるため、公式リファレンスで最新を確認すること。
-- ダッシュボードはChart.jsをCDN（`cdn.jsdelivr.net`）から読み込むため、オフライン環境では別途ローカルにライブラリを配置する改修が必要。
+- ダッシュボードはChart.jsをCDN（`cdn.jsdelivr.net`）から読み込むため、オフライン環境では別途ローカルにライブラリを配置する改修が必要。先物画面はfinancialプラグイン・luxonも追加で読み込む。
+- 本手順書は v1.2 時点（4ダッシュボード構成・1時間足・ATM動的判定・ストール検知・先物/NT倍率・Tailscaleリモート閲覧）に対応。VBAは別添 `OptionLogger.bas` のインポート方式とし、本文には全文を掲載しない。

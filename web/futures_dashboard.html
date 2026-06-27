@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日経225ミニOP 先物/NT倍率チャート</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
+<script src="data_futures.js"></script>
+<style>
+  body{font-family:"Segoe UI","Hiragino Kaku Gothic ProN",sans-serif;margin:0;padding:16px;background:#0f1115;color:#e6e6e6;}
+  h1{font-size:16px;font-weight:600;margin:0 0 4px;}
+  nav{display:flex;gap:10px;margin-bottom:12px;font-size:13px;}
+  nav a{color:#5aa0e6;text-decoration:none;padding:3px 8px;border:1px solid #2a2e38;border-radius:6px;}
+  nav a.active{background:#1a2330;border-color:#3a82d6;}
+  #stallBar{display:none;background:#5a1a1a;color:#ffd9d9;border:1px solid #d4537e;
+    border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px;font-weight:600;}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+  #status{font-size:12px;color:#8a8f99;}
+  .reloadbox{font-size:12px;color:#8a8f99;margin-left:auto;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:14px;}
+  .card{background:#1a1d24;border:1px solid #2a2e38;border-radius:8px;padding:10px 12px;}
+  .card.nt{border-color:#7bd49a;}
+  .card h3{margin:0 0 2px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:baseline;}
+  .card h3 .meta{font-size:11px;color:#8a8f99;font-weight:400;}
+  .card .tf{display:inline-block;margin-left:6px;padding:0 6px;font-size:10px;font-weight:700;
+    line-height:15px;color:#cfe3f5;background:#22354b;border:1px solid #3a82d6;border-radius:4px;vertical-align:middle;}
+  .card.nt .tf{color:#cdeed7;background:#1f3a2a;border-color:#7bd49a;}
+  .cw{position:relative;height:240px;margin-top:6px;}
+  .last{font-size:11px;color:#8a8f99;margin-top:6px;}
+</style>
+</head>
+<body>
+<h1>日経225先物 / TOPIX先物 / NT倍率 チャート</h1>
+<nav>
+  <a href="dashboard.html">IVスマイル</a>
+  <a href="price_dashboard.html">価格/IVマルチ</a>
+  <a href="heatmap_dashboard.html">IVヒートマップ</a>
+  <a href="futures_dashboard.html" class="active">先物/NT倍率</a>
+</nav>
+
+<div id="stallBar"></div>
+
+<div class="row">
+  <span id="status"></span>
+  <span class="reloadbox"><label><input type="checkbox" id="autoReload"> 自動更新</label></span>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+// 各チャートの定義: data_futures.js の系列キーと表示設定
+const PANELS=[
+  {key:'mini5', title:'日経225ミニ先物', tf:'5分足 / 24時間', type:'candle', color:'#5aa0e6'},
+  {key:'lgD',   title:'日経225先物',      tf:'日足 / 1年',      type:'candle', color:'#5aa0e6'},
+  {key:'lg60',  title:'日経225先物',      tf:'60分足 / 30日',   type:'candle', color:'#5aa0e6'},
+  {key:'tpD',   title:'TOPIX先物',        tf:'日足 / 1年',      type:'candle', color:'#e68bb0'},
+  {key:'tp60',  title:'TOPIX先物',        tf:'60分足 / 30日',   type:'candle', color:'#e68bb0'},
+  {key:'nt',    title:'NT倍率',           tf:'曲線 / 1年',      type:'line',   color:'#7bd49a'}
+];
+
+let charts=[];
+
+function fmtNum(v){return (v==null||!isFinite(v))?'—':(+v).toLocaleString(undefined,{maximumFractionDigits:4});}
+
+function lastClose(arr,type){
+  if(!arr||!arr.length)return '—';
+  const last=arr[arr.length-1];
+  return type==='line'?fmtNum(last.v):fmtNum(last.c);
+}
+
+function buildCandle(ctx,arr){
+  const data=arr.map(d=>({
+    x:luxon.DateTime.fromFormat(d.t.length>10?d.t:d.t+' 00:00','yyyy-MM-dd HH:mm').toMillis(),
+    o:d.o,h:d.h,l:d.l,c:d.c}));
+  return new Chart(ctx,{type:'candlestick',
+    data:{datasets:[{data:data,
+      color:{up:'#3bbf6f',down:'#d4537e',unchanged:'#8a8f99'},
+      borderColor:{up:'#3bbf6f',down:'#d4537e',unchanged:'#8a8f99'}}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>{const r=c.raw;
+          return ['始 '+fmtNum(r.o),'高 '+fmtNum(r.h),'安 '+fmtNum(r.l),'終 '+fmtNum(r.c)];}}}},
+      scales:{x:{type:'time',time:{tooltipFormat:'yyyy-MM-dd HH:mm'},
+          ticks:{color:'#8a8f99',font:{size:9},maxTicksLimit:8},grid:{color:'rgba(128,128,128,0.1)'}},
+        y:{position:'right',ticks:{color:'#8a8f99',font:{size:9}},grid:{color:'rgba(128,128,128,0.1)'}}}}});
+}
+
+function buildLine(ctx,arr,color){
+  const labels=arr.map(d=>d.t);
+  const vals=arr.map(d=>d.v);
+  return new Chart(ctx,{type:'line',
+    data:{labels:labels,datasets:[{data:vals,borderColor:color,borderWidth:1.6,
+      pointRadius:0,tension:0.2,spanGaps:true,fill:false}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{title:it=>it[0].label,
+          label:c=>'NT倍率 '+(c.parsed.y!=null?c.parsed.y.toFixed(4):'—')}}},
+      scales:{x:{ticks:{color:'#8a8f99',font:{size:9},maxTicksLimit:8},grid:{color:'rgba(128,128,128,0.1)'}},
+        y:{position:'right',ticks:{color:'#8a8f99',font:{size:9}},grid:{color:'rgba(128,128,128,0.1)'}}}}});
+}
+
+function render(){
+  charts.forEach(c=>c.destroy());charts=[];
+  const grid=document.getElementById('grid');grid.innerHTML='';
+  const fd=window.FUTURES_DATA||{};
+  let panelsDrawn=0;
+  PANELS.forEach(p=>{
+    const arr=fd[p.key]||[];
+    const card=document.createElement('div');
+    card.className='card'+(p.key==='nt'?' nt':'');
+    const h=document.createElement('h3');
+    h.innerHTML='<span>'+p.title+'<span class="tf">'+p.tf+'</span></span>'+
+                '<span class="meta">'+arr.length+'本　終値 '+lastClose(arr,p.type)+'</span>';
+    card.appendChild(h);
+    const wrap=document.createElement('div');wrap.className='cw';
+    const cv=document.createElement('canvas');wrap.appendChild(cv);
+    card.appendChild(wrap);grid.appendChild(card);
+    if(arr.length){
+      const ch=(p.type==='line')?buildLine(cv,arr,p.color):buildCandle(cv,arr);
+      charts.push(ch);panelsDrawn++;
+    }else{
+      const e=document.createElement('div');e.className='last';
+      e.textContent='データなし（ExportFutures を実行してください）';
+      card.appendChild(e);
+    }
+  });
+  const meta=window.FUTURES_META;
+  document.getElementById('status').textContent=
+    panelsDrawn+'/'+PANELS.length+'チャート表示'+(meta&&meta.generated?'　生成 '+meta.generated:'');
+}
+
+function checkStall(){
+  const meta=window.FUTURES_META;
+  let stalled=false;
+  if(!(meta&&meta.generated)) stalled=true;  // 先物は手動更新。ファイル自体が無い時だけ警告
+  const bar=document.getElementById('stallBar');
+  if(stalled){
+    bar.style.display='block';
+    bar.textContent='⚠ data_futures.js が読み込めません — ExportFutures を実行してください';
+  }else{
+    bar.style.display='none';
+  }
+}
+
+function init(){
+  checkStall();
+  if(!window.FUTURES_DATA){
+    document.getElementById('status').textContent='data_futures.js が読み込めません（ExportFutures を実行してください）';
+    return;
+  }
+  setupAutoReload();
+  render();
+}
+function setupAutoReload(){const cb=document.getElementById('autoReload');
+  if(localStorage.getItem('autoReloadFut')==='1'){cb.checked=true;
+    setTimeout(()=>location.reload(),300000);}
+  cb.addEventListener('change',()=>localStorage.setItem('autoReloadFut',cb.checked?'1':'0'));}
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
