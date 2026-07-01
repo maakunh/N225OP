@@ -207,6 +207,7 @@ data_futures.js（先物OHLC＋NT倍率）
 - **ATM動的判定**：VBA が先物ミニ現在値（Live!F1）を `OPTION_META.underlying` に書き出し、価格/IVマルチチャートと IVヒートマップが最近接の行使価格を ATM として算出。取得不可（空・エラー・0）時は既定値にフォールバック
 - **1時間足の生成**：`ExportDataJsHourly` が `Log` を「日付＋時＋行使価格」ごとの最終スナップショットに畳み込み、正時表記で `data_hourly.js`（`OPTION_DATA_H`）へ出力。`Scripting.Dictionary` の後勝ち上書きで各時間の最終値を採用しつつ初出順（時系列順）を保持。直近30日より古い行は除外
 - **先物データの生成**：`ExportFutures` が `Chart` シートの `RssChart` 展開結果（4本値）を読み、OHLCを `data_futures.js`（`FUTURES_DATA`）へ出力。NT倍率はラージ日足とTOPIX日足の終値を日付キーで突き合わせて比を算出。オプション系（data.js / data_hourly.js）とは独立した別系統で、手動実行・毎回取り直し
+- **RSS終端マーカーの除外**：`RssChart` は指定本数に満たないと、有効データの末尾に前回取得時の古いデータが残り、境目の日付セルが `--------`（ハイフンのみ）になることがある。`IsDashMarker` でこれを検出し、それ以降を読み取らずに打ち切ることで、残骸を `data_futures.js` に含めない
 - **実行ログ**：`WriteRunLog` が主要マクロの実行を `RunLog` シートに追記。データ行数が `RUNLOG_MAX` を超えるとヘッダー直下（最古）から超過分を削除してローテーション。記録失敗が本体処理を止めないよう `On Error Resume Next` で保護。毎分の `LogSnapshot` や `ExportDataJs` は記録対象外（ログ肥大を避けるため）
 
 ---
@@ -220,6 +221,7 @@ data_futures.js（先物OHLC＋NT倍率）
   - 銘柄コードは Live シート参照（ミニ=H1、ラージ=I1、TOPIX=J1）。足種・本数は `RssChart(,コード,足種,本数)` 形式で取得（5M/60M/D）。ラージ・TOPIXはメジャーSQ限月でないとコードを取得できないため、メジャーSQ限月を C1 に持たせ I1・J1 がこれを参照する（v1.2で対応）
   - 既存の Log/data.js・data_hourly.js 機構とは独立した別系統。`StartLogging` とは別に、見たいとき `ExportFutures` を手動実行して取り直す
   - 先物データは手動の `ExportFutures` に加え、`StartFutures` で60分ごとの自動更新が可能（`StopFutures` で停止）。1分ループとは独立した別タイマー
+  - `RssChart` が末尾に残す古いデータ（区切りの `--------` 以降）を `IsDashMarker` で検出し除外。指定本数に満たない場合でも有効データの直前までを正しく描画
 - **実行ログ（RunLogシート）を追加** — 主要マクロの実行を「日時・機能・備考」で記録。`RUNLOG_MAX`（既定1万行）を超えると古い行から自動削除
   - 既存3ダッシュボードのナビに「先物/NT倍率」リンクを追加
   - ローソク足描画のため Chart.js の financial プラグインと日付アダプタ（luxon）をCDNから追加読み込み

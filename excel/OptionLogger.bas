@@ -515,6 +515,7 @@ Private Function SeriesJs(ByVal ws As Worksheet, ByVal formulaRow As Long, ByVal
         If IsError(dv) Then Exit For
         If IsEmpty(dv) Then Exit For
         If Len(Trim(CStr(dv))) = 0 Then Exit For
+        If IsDashMarker(dv) Then Exit For   ' --------(RSSの終端マーカー)以降は古い残骸
         ' 終値が数値の行だけ採用(ヘッダー等はスキップ)
         Dim cOk As Boolean
         cOk = False
@@ -550,6 +551,7 @@ Private Function NtRatioJs(ByVal ws As Worksheet, ByVal formulaRow As Long, ByVa
         If IsError(dv) Then Exit For
         If IsEmpty(dv) Then Exit For
         If Len(Trim(CStr(dv))) = 0 Then Exit For
+        If IsDashMarker(dv) Then Exit For   ' --------(RSSの終端マーカー)以降は古い残骸
         If Not IsError(cv) Then
             If IsNumeric(cv) Then
                 If CDbl(cv) <> 0 Then
@@ -570,6 +572,7 @@ Private Function NtRatioJs(ByVal ws As Worksheet, ByVal formulaRow As Long, ByVa
         If IsError(dv) Then Exit For
         If IsEmpty(dv) Then Exit For
         If Len(Trim(CStr(dv))) = 0 Then Exit For
+        If IsDashMarker(dv) Then Exit For   ' --------(RSSの終端マーカー)以降は古い残骸
         Dim lcOk As Boolean
         lcOk = False
         If Not IsError(cv) Then
@@ -590,6 +593,20 @@ Private Function NtRatioJs(ByVal ws As Worksheet, ByVal formulaRow As Long, ByVa
         End If
     Next r
     NtRatioJs = out
+End Function
+
+
+' RSSチャートの終端マーカー判定。
+' 日付/時刻セルが "-" のみ(--------等)なら、それ以降は前回取得時の古い残骸とみなす。
+Private Function IsDashMarker(ByVal v As Variant) As Boolean
+    IsDashMarker = False
+    On Error Resume Next
+    If IsError(v) Or IsEmpty(v) Then Exit Function
+    Dim s As String
+    s = Trim(CStr(v))
+    If Len(s) = 0 Then Exit Function
+    If Len(Replace(s, "-", "")) = 0 Then IsDashMarker = True
+    On Error GoTo 0
 End Function
 
 ' 日付値を yyyy-mm-dd 文字列へ(RssChartの日付はExcel日付 or 文字列のことがある)
